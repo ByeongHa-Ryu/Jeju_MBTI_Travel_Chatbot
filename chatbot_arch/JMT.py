@@ -1,6 +1,8 @@
 from callout_form import * 
 
 def run_agent_continuously():
+    ### memory for chatbot 
+    memory = ConversationBufferMemory()
     print("JMT에게 뭐든 물어보세요.")
 
     while True:
@@ -11,8 +13,9 @@ def run_agent_continuously():
             break
         
         try:
-            response = Callout(message=input_query)
-            print("AI:", response) 
+            response = Callout(message=input_query,memory=memory)
+            print("AI:", response)
+            memory.save_context({"user": input_query}, {"bot": response})
         except Exception as e:
             print("에러가 발생했습니다:", e)
 
