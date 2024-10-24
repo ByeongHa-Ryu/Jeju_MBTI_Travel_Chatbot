@@ -97,6 +97,43 @@ st.markdown(
         color: #000000 !important;
     }
 
+    /* 지도 페이지 버튼 스타일 */
+    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"]:not([aria-selected="true"]) {
+        background-color: #e3f2fd;  /* 연한 하늘색 배경 */
+        border-left: 4px solid #2196F3;
+    }
+    
+    /* 지도 페이지가 선택됐을 때 스타일 */
+    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"][aria-selected="true"] {
+        background-color: #2196F3;  /* 진한 하늘색 배경 */
+        color: white;
+        border-left: 4px solid #1976D2;  /* 더 진한 하늘색 보더 */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+   /* 애니메이션 정의 */
+    @keyframes slideIn {
+        from {
+            transform: translateX(-10px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    /* 사이드바 네비게이션 아이템 애니메이션 */
+    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao {
+        animation: slideIn 0.3s ease-out;
+        transition: all 0.3s ease;
+    }
+    
+    /* 호버 효과 */
+    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao:hover {
+        transform: scale(1.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
 
     }
     </style>
@@ -175,7 +212,7 @@ if not st.session_state.mbti:
         with st.chat_message("assistant"):
             with st.spinner("JMT가 생각 중이에요...🤔"):
                 try:
-                    response = Callout(message=user_input, memory=st.session_state.memory)
+                    response = Callout(message=user_input, memory=st.session_state.memory, user_mbti=None)
                     st.write(response)
                     # AI 응답을 세션에 저장
                     st.session_state.messages.append({"role": "assistant", "content": response})
@@ -187,7 +224,7 @@ if not st.session_state.mbti:
                     st.session_state.messages.append({"role": "assistant", "content": error_message})
 # 메인 화면 - MBTI 입력 후
 else:    
-    st.title(f"안녕하세요, {st.session_state.mbti}님! 👋")
+    st.title(f"{st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요! 👋")
     display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")
 
@@ -212,7 +249,7 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("JMT가 생각 중이에요...🤔"):
                 try:
-                    response = Callout(message=user_input, memory=st.session_state.memory)
+                    response = Callout(message=user_input, memory=st.session_state.memory, user_mbti = st.session_state.mbti)
                     st.write(response)
                     # AI 응답을 세션에 저장
                     st.session_state.messages.append({"role": "assistant", "content": response})

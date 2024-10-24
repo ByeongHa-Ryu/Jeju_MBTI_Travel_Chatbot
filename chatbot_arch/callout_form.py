@@ -20,8 +20,8 @@ embeddings = HuggingFaceEmbeddings(
     model_kwargs={'device': 'cpu'},
     encode_kwargs={'normalize_embeddings': True}
 )
-
-def Callout(message,memory):
+## user_mbti
+def Callout(message,memory,user_mbti):
     try:
         # Query classification 
         classification_response = llm.invoke(input=cls_llm_inst.format(input_query=message,memory = memory))
@@ -52,25 +52,68 @@ def Callout(message,memory):
             print('cls 임시 print문 : 추천')
             
             try:
-                # FAISS로 맛집 검색
-                restaurants_df = load_faiss_and_search(message, k=3)
+                # 세션 상태 초기화
+                if 'current_map' not in st.session_state:
+                    st.session_state.current_map = None
+                    
+                # 추천 처리
+                final_response, restaurants_data, tourist_spots = process_recommendation(message)
                 
-                if restaurants_df is not None and not restaurants_df.empty:
-                    # 맛집 정보 구성
-                    restaurants_info = format_restaurant_response(restaurants_df)
+                if restaurants_data is not None and tourist_spots is not None:
+                    # 컨테이너 생성
+                    if 'title_container' not in st.session_state:
+                        st.session_state.title_container = st.container()
+                    if 'map_section' not in st.session_state:
+                        st.session_state.map_section = st.container()
+                    if 'info_section' not in st.session_state:
+                        st.session_state.info_section = st.container()
+                        
+                    # 타이틀 표시
+                    with st.session_state.title_container:
+                        st.subheader("🗺️ 추천 맛집과 주변 관광지")
                     
-                    # LLM 응답 생성
-                    user_mbti = st.session_state.get('mbti', None)
-                    final_response = generate_llm_response(message, restaurants_info, user_mbti)
+                    # 지도 섹션
+                    with st.session_state.map_section:
+                        # 캐시된 지도 생성
+                        map_obj = create_cached_map(restaurants_data, tourist_spots)
+                        
+                        if map_obj:
+                            st.session_state.current_map = map_obj
+                            # 지도 표시
+                            display_map_with_data(map_obj)
                     
-                    # 지도 표시
-                    title_container = st.empty()
-                    title_container.subheader("🗺️ 추천 맛집 위치")
-                    display_map(restaurants_df)
+                    # 정보 섹션
+                    with st.session_state.info_section:
+                        with st.expander("📍 상세 정보", expanded=True):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("추천 맛집")
+                                if not restaurants_data.empty:
+                                    st.dataframe(
+                                        restaurants_data[['음식점명']],
+                                        hide_index=True
+                                    )
+                            
+                            with col2:
+                                st.write("주변 관광지")
+                                tourist_data = []
+                                for idx, restaurant in restaurants_data.iterrows():
+                                    if idx < len(tourist_spots):
+                                        for spot in tourist_spots[idx]:
+                                            tourist_data.append({
+                                                '관광지명': spot['관광지명'],
+                                                '거리': f"{spot['거리']:.1f}km"
+                                            })
+                                if tourist_data:
+                                    st.dataframe(
+                                        pd.DataFrame(tourist_data),
+                                        hide_index=True
+                                    )
                     
-                else:
-                    final_response = "죄송합니다. 해당하는 맛집을 찾을 수 없습니다."
-                
+                    # 응답 표시
+                    st.write(final_response)
+                    
             except Exception as e:
                 final_response = f"맛집 추천 처리 중 에러가 발생했습니다: {e}"
                 print(f"Error in recommendation: {e}")
