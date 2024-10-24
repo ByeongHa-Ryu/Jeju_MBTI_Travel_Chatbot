@@ -1,6 +1,7 @@
 import streamlit as st 
 from PIL import Image
 from callout_form import *
+from mbti import *
 # """
 # 연한 주황색:
 # #FFF5E6 (아주 연한 주황)
@@ -82,7 +83,7 @@ st.markdown(
     .stTextInput>div>div>input {
         background-color: #FF8C00;
         border-color: #FFA500;
-        color: #FF8C00;
+        color: #000000; # 테두리
     }
     
     /* 경고 메시지 스타일링 */
@@ -96,22 +97,6 @@ st.markdown(
         color: #000000 !important;
     }
 
-    /* 채팅 입력창 스타일링 */
-    .stChatInputContainer, [data-testid="stChatInput"] {
-        background-color: #FFB366 !important;
-        padding: 10px;
-        border-radius: 10px;
-        margin-top: 10px;
-    }
-    
-    /* 채팅 메시지 컨테이너 스타일링 */
-    .stChatMessageContent {
-        background-color: #FFE5CC;
-        color: #000000 !important;
-        border-radius: 10px;
-        padding: 10px;
-
-    }
 
     }
     </style>
@@ -152,13 +137,13 @@ with st.sidebar:
         if validate_mbti(mbti_input):
             st.session_state.mbti = mbti_input.upper()  # 입력값 세션 상태에 저장
             st.session_state.messages = [{"role": "assistant", "content": f"안녕하세요! {st.session_state.mbti}유형이시군요! 제주도 맛집에 대해 무엇이든 물어보세요 🍊"}]
-            st.sidebar.success("혼저옵서예~")
+            st.sidebar.success("🍊혼저옵서예🍊")
         else:
             st.sidebar.error("유효하지 않은 MBTI 형식입니다.")
 
     if st.session_state.mbti:
         st.sidebar.markdown(
-            f"<h3 style='color:orange;'>당신의 MBTI: {st.session_state.mbti}</h3>",
+            f"<h3 style='color:orange;'>당신의 MBTI: {st.session_state.mbti}🪂</h3>",
             unsafe_allow_html=True,
         )
 
@@ -203,6 +188,7 @@ if not st.session_state.mbti:
 # 메인 화면 - MBTI 입력 후
 else:    
     st.title(f"안녕하세요, {st.session_state.mbti}님! 👋")
+    display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")
 
     # 기존 메시지들 표시
