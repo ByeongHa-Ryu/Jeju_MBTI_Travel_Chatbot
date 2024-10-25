@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#FF8C00"  # 주요 강조색 (진한 주황)
+backgroundColor = "#FFF5E6"  # 배경색 (연한 주황)
+secondaryBackgroundColor = "#FFE4B5"  # 두 번째 배경색
+textColor = "#000000"  # 텍스트 색상을 검정색으로 변경
+font = "sans serif"
