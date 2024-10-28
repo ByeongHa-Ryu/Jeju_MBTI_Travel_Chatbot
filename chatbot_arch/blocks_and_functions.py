@@ -3,6 +3,10 @@ from langchain.agents.agent_types import AgentType
 from langchain_core.output_parsers import StrOutputParser,JsonOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain_google_genai import GoogleGenerativeAI # type: ignore
+from langchain.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.runnables import ConfigurableField
+
 from dotenv import load_dotenv
 import os
 from prompts import cls_llm_inst
@@ -11,8 +15,6 @@ from prompts import *
 import streamlit as st
 from transformers import AutoTokenizer, AutoModel
 import numpy as np 
-# import FAISS
-# import torch
 
 """LLM Blocks"""
 
@@ -24,8 +26,8 @@ my_api_key = os.getenv("GOOGLE_API_KEY")
 llm = GoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=my_api_key)
 
 ## dataframe agent 
-data_dir = 'data/JEJU_MCT_DATA_v2.csv'
-df = pd.read_csv(data_dir,encoding='cp949')
+data_dir = 'data/JEJU_MCT_DATA_final.csv'
+df = pd.read_csv(data_dir)
 
 
 ## Data Frame agent on Gemini Engine 
@@ -39,27 +41,49 @@ agent = create_pandas_dataframe_agent(
     allow_dangerous_code=True 
 )
 
-# ## RAG 
-# #device settings 
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-# model_name = "jhgan/ko-sroberta-multitask"
-# tokenizer = AutoTokenizer.from_pretrained(model_name)
-# embedding_model = AutoModel.from_pretrained(model_name).to(device)
+# ## RAG
+mbti = "ENFP"
+month="3"
 
-# # embedding func
-# def embed_text(text):
-#     # 토크나이저의 출력도 GPU로 이동
-#     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True).to(device)
-#     with torch.no_grad():
-#         # 모델의 출력을 GPU에서 연산하고, 필요한 부분을 가져옴
-#         embeddings = embedding_model(**inputs).last_hidden_state.mean(dim=1)
-#     return embeddings.squeeze().cpu().numpy()  # 결과를 CPU로 이동하고 numpy 배열로 변환
+model_name = "upskyy/bge-m3-Korean"
+model_kwargs = {'device': 'cpu'} 
+embeddings = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs=model_kwargs
+        # encode_kwargs=encode_kwargs
+)
 
-# def generate_response_with_faiss(
-#     question, df, embeddings, model, embed_text, 
-#     time, local_choice, index_path=os.path.join(module_path, 'faiss_index.index'), 
-#     max_count=10, k=3, print_prompt=True):
-#     return None
+
+# 저장된 데이터를 로드
+loaded_db = FAISS.load_local(
+    folder_path=f"./database/mct_db/{mbti}/{month}",
+    index_name=f"mct_{mbti}_{month}",
+    embeddings=embeddings,
+    allow_dangerous_deserialization=True,
+)
+# k 설정
+retriever = loaded_db.as_retriever(search_kwargs={"k": 1}).configurable_fields(
+    search_type=ConfigurableField(
+        id="search_type",
+        name="Search Type",
+        description="The search type to use",
+    ),
+    search_kwargs=ConfigurableField(
+        # 검색 매개변수의 고유 식별자를 설정
+        id="search_kwargs",
+        # 검색 매개변수의 이름을 설정
+        name="Search Kwargs",
+        # 검색 매개변수에 대한 설명을 작성
+        description="The search kwargs to use",
+    ),
+)
+
+config = {
+    "configurable": {
+        "search_type": "mmr",
+        "search_kwargs": {"k": 5, "fetch_k": 20, "lambda_mult": 0.8},
+    }
+}
 
 
 
