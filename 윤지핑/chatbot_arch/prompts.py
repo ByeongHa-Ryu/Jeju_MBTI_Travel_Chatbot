@@ -12,6 +12,12 @@ chat history : {memory}
 """
 
 # instruction for classifying user query into 3 classes 
+
+# few-shot prompts 
+with open('prompts_txt/fewshot_cls.txt', 'r', encoding='utf-8') as file:
+    few_shot_prompt_for_cls  = file.read()
+
+
 cls_llm_inst = """
 chat history : {memory}
 
@@ -23,41 +29,55 @@ chat history : {memory}
 
 질문이 해당하는 범주 이름을 '분석 관련', '추천 관련', 또는 '일반 질문' 중 하나로만 대답하세요.
 
+{few_shot_prompt_for_cls}
+
+실제 문제:
 질문: {input_query}
 답변:
 """
 
 #Inst that helps agent to analysis well 
 
-## 칼럼 정의서 txt 
-column_inst = 'data/column_instructor.txt'
-
+with open('prompts_txt/data_info_prompt.txt', 'r', encoding='utf-8') as file:
+    data_info_prompt = file.read()
+    
 agent_inst = """
-데이터 정보를 활용하여, 사용자의 요청에 답하세요. 
 
-데이터 정보 : {column_inst}
+참고사항에 따라 사용자의 요청에 답하세요. 
 
-사용자 요청: {user_query}
+참고 사항 : {data_info_prompt}
+
+답변에 꼭 수치를 추가해서 답변하세요. 
+
+사용자 요청: {input_query}
 """
 
 
 #post-processes pandas DF agent's output 
 post_agent_inst = """
-당신읜 agent 의 분석 결과를 고객에게 전달하는 인공지능 비서입니다. 
+당신은 agent 의 분석 결과를 고객에게 전달하는 인공지능 비서입니다. 
 다음은 agent가 생성한 분석 과정과 결과입니다. 
     
     질문 : {input_query}
     과정 : {verbose_output}
     결과 : {analysis_result}
     
-질문에 대한 답변을 정확하게 제공하세요.
-마크다운 형태로 답변을 구조화 하여 응답하세요.
-    
+질문에 대한 답변을 정확하고 간단하게 제공하세요.
+수치를 답변에 꼭 추가하세요. 
+
     답변: 
 """
 
-# instruction for rag 
-rag_inst = """
 
+#post-processes RAG output to Answer well 
+
+post_rag_inst = """
+chat history : {memory}
+
+참고문헌을 보고, 고객의 질문에 대한 대답을 구성하세요. 
+
+질문 : {input_query}
+참고문헌 : {context}
+
+답변 : 
 """
-

@@ -1,8 +1,31 @@
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any, Tuple
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import folium
+from folium import plugins
+import streamlit as st
+from streamlit_folium import st_folium
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain.agents.agent_types import AgentType
+from langchain_core.output_parsers import StrOutputParser
+from langchain.memory import ConversationBufferMemory
+from langchain_google_genai import GoogleGenerativeAI
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.runnables import ConfigurableField
+from dotenv import load_dotenv
+import os
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 from langchain.agents.agent_types import AgentType
 from langchain_core.output_parsers import StrOutputParser,JsonOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain_google_genai import GoogleGenerativeAI # type: ignore
+from langchain.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.runnables import ConfigurableField
+
 from dotenv import load_dotenv
 import os
 from prompts import cls_llm_inst
@@ -11,14 +34,6 @@ from prompts import *
 import streamlit as st
 from transformers import AutoTokenizer, AutoModel
 import numpy as np 
-import folium
-from folium import plugins
-import streamlit as st
-from streamlit_folium import st_folium
-from geopy.distance import geodesic
-# import FAISS
-# import torch
-
 """LLM Blocks"""
 
 load_dotenv()
@@ -29,8 +44,8 @@ my_api_key = os.getenv("GOOGLE_API_KEY")
 llm = GoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=my_api_key)
 
 ## dataframe agent 
-data_dir = 'data/JEJU_MCT_DATA_v2.csv'
-df = pd.read_csv(data_dir,encoding='cp949')
+data_dir = 'data/JEJU_MCT_DATA_final.csv'
+df = pd.read_csv(data_dir)
 
 
 ## Data Frame agent on Gemini Engine 
@@ -44,97 +59,113 @@ agent = create_pandas_dataframe_agent(
     allow_dangerous_code=True 
 )
 
-# RAG 
-# device settings 
-# # device = "cuda" if torch.cuda.is_available() else "cpu"
-# model_name = "jhgan/ko-sroberta-multitask"
-# tokenizer = AutoTokenizer.from_pretrained(model_name)
-# embedding_model = AutoModel.from_pretrained(model_name).to(device)
 
-# # embedding func
-# def embed_text(text):
-#     # 토크나이저의 출력도 GPU로 이동
-#     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True).to(device)
-#     with torch.no_grad():
-#         # 모델의 출력을 GPU에서 연산하고, 필요한 부분을 가져옴
-#         embeddings = embedding_model(**inputs).last_hidden_state.mean(dim=1)
-#     return embeddings.squeeze().cpu().numpy()  # 결과를 CPU로 이동하고 numpy 배열로 변환
+"""Fuctions for JMT app"""
 
-# def generate_response_with_faiss(
-#     question, df, embeddings, model, embed_text, 
-#     time, local_choice, index_path=os.path.join(module_path, 'faiss_index.index'), 
-#     max_count=10, k=3, print_prompt=True):
-#     return None
+## MBTI validate
+def validate_mbti(mbti):
+    # input length 
+    if len(mbti) != 4:
+        return False
+    
+    # input value
+    if mbti[0] not in {"E", "I"}: 
+        return False
+    if mbti[1] not in {"N", "S"}: 
+        return False
+    if mbti[2] not in {"F", "T"}:
+        return False
+    if mbti[3] not in {"P", "J"}: 
+        return False
 
-import folium
-from folium import plugins
-import streamlit as st
-from streamlit_folium import st_folium
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+    return True  
 
-import streamlit as st
-import folium
-from streamlit_folium import st_folium
-import pandas as pd
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
-import numpy as np
+def clear_chat_history():
+    st.session_state.memory = ConversationBufferMemory()
+    st.session_state.messages = [{"role": "assistant", "content": "제주도를 여행하기 딱 좋은 날씨네요 😎"}]
 
-### 여기 변경
-### 임베딩, retriever, metadata 등 추가해야함
+## mbti와 month로 db에서 문서 가져옴
+def load_df(mbti, month):
+    model_name = "upskyy/bge-m3-Korean" # embedding model
+    model_kwargs = {'device': 'cpu'} 
+    embeddings = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs=model_kwargs
+            # encode_kwargs=encode_kwargs
+    )
 
-def load_faiss_and_search(query, k=1):
+    # 저장된 데이터를 로드
+    loaded_db = FAISS.load_local(
+        folder_path=f"./database/mct_db/{mbti}/{month}",
+        index_name=f"mct_{mbti}_{month}",
+        embeddings=embeddings,
+        allow_dangerous_deserialization=True,
+    )
+
+    return loaded_db
+
+## query로 정보 retrieve
+def retrieve_mct(loaded_db, query):
+    config = {
+        "configurable": {
+        "search_type": "mmr",
+        "search_kwargs": {"k": 5, "fetch_k": 20, "lambda_mult": 0.8},
+        }
+    }
+
+    # k 설정
+    retriever = loaded_db.as_retriever(search_kwargs={"k": 1}).configurable_fields(
+        search_type=ConfigurableField(
+            id="search_type",
+            name="Search Type",
+            description="The search type to use",
+        ),
+        search_kwargs=ConfigurableField(
+            # 검색 매개변수의 고유 식별자를 설정
+            id="search_kwargs",
+            # 검색 매개변수의 이름을 설정
+            name="Search Kwargs",
+            # 검색 매개변수에 대한 설명을 작성
+            description="The search kwargs to use",
+        ),
+    )
+
+    query = f"{query} {st.session_state.get('mbti', '')}"
+    retriever.configure(**config)
+    results = retriever.get_relevant_documents(query)
+
+    return results
+
+
+def load_faiss_and_search(query, k=3):
     """FAISS DB에서 쿼리와 관련된 맛집 검색"""
     try:
-        # 임베딩 모델 초기화
-        embeddings = HuggingFaceEmbeddings(
-            model_name="jhgan/ko-sroberta-multitask",
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
-        )
-        
-        # FAISS 로드
-        db = FAISS.load_local(
-            "faiss_db", 
-            embeddings, 
-            allow_dangerous_deserialization=True
-        )
-        
-        # 검색 쿼리 생성
-        search_query = f"{query} {st.session_state.get('mbti', '')}"
-        docs_with_scores = db.similarity_search_with_score(search_query, k=k)
-        
+        loaded_db = load_df(mbti, month)
+        retrieve_documents = retrieve_mct(loaded_db, query)
+
         # 검색 결과를 데이터프레임으로 변환
         search_results = []
-        for doc, score in docs_with_scores:
+        for doc in retrieve_documents:
             metadata = doc.metadata
             
             # 위도, 경도 값이 nan인 경우 처리
             try:
-                search_results = [{'idx': 77, '위도': 33.2455473, '경도': 126.5644088}, {'idx': 4, '위도': 33.3700283, '경도': 126.2392054}, {'idx': 106, '위도': 33.3189962, '경도': 126.3456767}]
-                # lat = float(metadata['위도']) if pd.notna(metadata['위도']) else np.nan
-                # lng = float(metadata['경도']) if pd.notna(metadata['경도']) else np.nan
+                lat = float(metadata['위도']) if pd.notna(metadata['위도']) else np.nan
+                lng = float(metadata['경도']) if pd.notna(metadata['경도']) else np.nan
                 
-                # search_results.append({
-                #     'index': metadata.get('index', None),  # index가 없는 경우 None 반환
-                #     '위도': lat,
-                #     '경도': lng,
-                #     'similarity_score': score
-                # })
+                search_results.append({
+                    'index': metadata.get('index', None),  # index가 없는 경우 None 반환
+                    '위도': lat,
+                    '경도': lng,
+                })
             except (ValueError, TypeError):
-                search_results = [{'idx': 77, '위도': 33.2455473, '경도': 126.5644088}, {'idx': 4, '위도': 33.3700283, '경도': 126.2392054}, {'idx': 106, '위도': 33.3189962, '경도': 126.3456767}]
-
                 # 변환 불가능한 값이 있는 경우
-                # search_results.append({
-                #     'index': metadata.get('index', None),
-                #     '위도': np.nan,
-                #     '경도': np.nan,
-                #     'similarity_score': score
-                # })
-
-
-        
+                search_results.append({
+                    'index': metadata.get('index', None),
+                    '위도': np.nan,
+                    '경도': np.nan,
+                })
+  
         return search_results
         
     except Exception as e:
@@ -149,10 +180,10 @@ def get_restaurant_details(search_results, restaurants_df):
             restaurant = restaurants_df.iloc[result['idx']]
             restaurants_data.append({
                 '음식점명': restaurant['음식점명'],
-                # '주소': restaurant['주소'],
+                '주소': restaurant['주소'],
+                '업종': restaurant['업종'],
                 '위도': result['위도'],
                 '경도': result['경도'],
-                # 'similarity_score': result['similarity_score']
             })
         print(restaurants_data)
         return pd.DataFrame(restaurants_data)
@@ -161,7 +192,7 @@ def get_restaurant_details(search_results, restaurants_df):
         st.error(f"음식점 정보 조회 중 오류 발생: {str(e)}")
         return None
 
-def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, n=2):
+def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, n=3):
     """음식점 근처의 관광지 찾기"""
     try:
         # 음식점 좌표가 NaN인 경우 빈 리스트 반환
@@ -184,7 +215,10 @@ def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, n=2):
                 
                 distances.append({
                     '관광지명': tourist['관광지명'],
-                    # '주소': tourist['주소'],
+                    '주소': tourist['주소'],
+                    '대분류': tourist['대분류'],
+                    '중분류': tourist['중분류'],
+                    '소분류': tourist['소분류'],
                     '위도': tourist['위도'],
                     '경도': tourist['경도'],
                     '거리': distance
@@ -259,8 +293,7 @@ def create_map_with_restaurants_and_tourists(restaurants_df, tourist_spots):
                     tourist_popup = f"""
                         <div style='width: 200px'>
                             <h4 style='margin: 0; padding: 5px 0;'>{tourist['관광지명']}</h4>
-                            <p style='margin: 5px 0;'>주소: </p>
-                            <p style='margin: 5px 0;'>거리: {tourist['거리']:.1f}km</p>
+                            <p style='margin: 5px 0;'>주소: {tourist['주소']}</p>
                         </div>
                     """
                     
@@ -314,12 +347,15 @@ def format_restaurant_and_tourist_response(restaurants_df, tourist_spots):
         for idx, row in restaurants_df.iterrows():
             restaurant_info = {
                 "이름": row['음식점명'],
-                # "주소": row['주소'],
-                # "유사도_점수": float(row['similarity_score']),
+                "업종": row['업종'],
+                "주소": row['주소'],
                 "주변_관광지": [
                     {
                         "이름": tourist['관광지명'],
-                        # "주소": tourist['주소'],
+                        "주소": tourist['주소'],
+                        "대분류": tourist['대분류'],
+                        "중분류": tourist['중분류'],
+                        "소분류": tourist['소분류'],
                         "거리": f"{tourist['거리']:.1f}km"
                     }
                     for tourist in tourist_spots[idx]
@@ -352,7 +388,7 @@ def generate_llm_response(query, formatted_data, user_mbti=None):
         6. 맛집과 관광지를 함께 즐기는 코스를 제안해주세요.
         7. 즐거운 여행이 되길 바라는 멘트로 마무리해주세요.
 
-        답변에서는 위도/경도 정보나 유사도 점수는 언급하지 말아주세요."""
+        답변에서는 위도/경도 정보는 언급하지 말아주세요."""
 
         response = llm.invoke(input=prompt)
         return response
@@ -364,8 +400,8 @@ def process_recommendation(message):
     """추천 관련 메시지 처리 함수"""
     try:
         # 데이터프레임 로드
-        restaurants_df = pd.read_csv('음식점위경도.csv')
-        tourist_spots_df = pd.read_csv('관광지위경도.csv')
+        restaurants_df = pd.read_csv(f"./database/mct_df/{mbti}/mct_{month}_{mbti}.csv")
+        tourist_spots_df = pd.read_csv(f"./database/tour_df/{mbti}/tour_{month}_{mbti}.csv")
         
         # 1. FAISS 검색
         search_results = load_faiss_and_search(message, k=3)
@@ -398,27 +434,3 @@ def process_recommendation(message):
     except Exception as e:
         print(f"Error in recommendation process: {e}")
         return f"처리 중 오류가 발생했습니다: {str(e)}", None, None
-
-"""Fuctions for JMT app"""
-
-## MBTI validate
-def validate_mbti(mbti):
-    # input length 
-    if len(mbti) != 4:
-        return False
-    
-    # input value
-    if mbti[0] not in {"E", "I"}: 
-        return False
-    if mbti[1] not in {"N", "S"}: 
-        return False
-    if mbti[2] not in {"F", "T"}:
-        return False
-    if mbti[3] not in {"P", "J"}: 
-        return False
-
-    return True  
-
-def clear_chat_history():
-    st.session_state.memory = ConversationBufferMemory()
-    st.session_state.messages = [{"role": "assistant", "content": "제주도를 여행하기 딱 좋은 날씨네요 😎"}]
