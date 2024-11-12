@@ -2,6 +2,8 @@ import streamlit as st
 from PIL import Image
 from callout_form import *
 from mbti import *
+from langchain.memory import ConversationTokenBufferMemory
+
 # """
 # 연한 주황색:
 # #FFF5E6 (아주 연한 주황)
@@ -145,7 +147,7 @@ st.markdown(
 
 # 세션 상태 초기화 
 if "memory" not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory()
+    st.session_state.memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=3000)
 
 if "mbti" not in st.session_state:
     st.session_state.mbti = ""  # MBTI 초기값
@@ -201,40 +203,15 @@ with st.sidebar:
 
 if not st.session_state.mbti:
     st.title("제주도 맛집 추천 챗봇 JMT입니다! 👋")
-    st.subheader("MBTI서비스를 원하신다면 MBTI를 입력해주세요!")
+    st.subheader("당신의 MBTI를 입력해주세요!")
     
     # MBTI 입력 전 메시지 표시
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
     
-    user_input = st.chat_input("일반 맛집 추천받기 (예: 제주도 흑돼지 맛집 추천해주세요!)🍊")      
-    # 사용자 입력이 있을 때 처리
-    if user_input:
-        # 사용자 메시지 표시
-        with st.chat_message("user"):
-            st.write(user_input)
-        
-        # 사용자 메시지를 세션에 저장
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        # AI 응답 생성
-        with st.chat_message("assistant"):
-            with st.spinner("JMT가 생각 중이에요...🤔"):
-                try:
-                    response = Callout(message=user_input, memory=st.session_state.memory, user_mbti=None)
-                    st.write(response)
-                    # AI 응답을 세션에 저장
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.session_state.memory.save_context({"user": user_input}, {"bot": response})
-
-                except Exception as e:
-                    error_message = f"에러가 발생했습니다: {e}"
-                    st.write(error_message)
-                    st.session_state.messages.append({"role": "assistant", "content": error_message})
 # 메인 화면 - MBTI 입력 후
 else:    
-    print(st.session_state.month[0])
     st.title(f"{st.session_state.month} {st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요! 👋")
     display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")

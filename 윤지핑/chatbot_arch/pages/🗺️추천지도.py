@@ -31,27 +31,27 @@ st.markdown(
    /* 모든 텍스트 요소에 대한 기본 색상 설정 */
    p, h1, h2, h3, h4, h5, h6, .stMarkdown, span, li, label, .stSelectbox, 
    .stMultiSelect, [data-testid="stMarkdownContainer"] p {
-       color: #1E4B6B !important;  /* 진한 파란색 */
+       color: #1E3A8A !important;  /* 진한 파란색 */
    }
    
    /* 선택된 옵션의 텍스트 색상 */
    .stSelectbox > div > div > div {
-       color: #1E4B6B !important;
+       color: #87CEFA !important;
    }
    
    /* 드롭다운 메뉴 항목의 텍스트 색상 */
    .stSelectbox > div > div > ul > li {
-       color: #1E4B6B !important;
+       color: #87CEFA !important;
    }
    
    /* 멀티셀렉트 선택된 항목 텍스트 */
    .stMultiSelect > div > div > div {
-       color: #1E4B6B !important;
+       color: #87CEFA !important;
    }
    
    /* 버튼 스타일링 */
    .stButton>button {
-       background-color: #4682B4 !important;  /* 스틸블루 */
+       background-color: #87CEFA !important;  /* 
        color: white !important;
        font-weight: bold;
        border: none;
@@ -59,7 +59,8 @@ st.markdown(
    
    /* 선택박스 스타일링 */
    .stSelectbox, .stMultiSelect {
-       background-color: #F0F8FF;  /* 앨리스블루 */
+       background-color:  white;  /* 앨리스블루 */
+       color: white
    }
    
    /* 성공 메시지 스타일링 */
@@ -69,7 +70,7 @@ st.markdown(
    
    /* 정보 메시지 스타일링 */
    .stInfo {
-       background-color: #F0F8FF;  /* 앨리스블루 */
+       background-color: #87CEFA;  /* 앨리스블루 */
    }
 
    /* 지도 페이지 버튼 스타일 */
@@ -80,7 +81,7 @@ st.markdown(
     
     /* 지도 페이지가 선택됐을 때 스타일 */
     [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"][aria-selected="true"] {
-        background-color: #2196F3;  /* 진한 하늘색 배경 */
+        background-color: #87CEFA;  /* 
         color: white;
         border-left: 4px solid #1976D2;  /* 더 진한 하늘색 보더 */
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -114,6 +115,7 @@ st.markdown(
    """,
    unsafe_allow_html=True,
 )
+
 
 
 def get_nearby_places(data, center_lat, center_lng, radius):
@@ -151,6 +153,12 @@ def display_accumulated_map():
         st.session_state.all_restaurants = pd.DataFrame()
     if 'all_tourist_spots' not in st.session_state:
         st.session_state.all_tourist_spots = []
+
+    # 세션 상태로 지도 관련 초기값 설정
+    if 'map_center' not in st.session_state:
+        st.session_state.map_center = [33.384, 126.551]  # 제주도 중심 좌표
+    if 'radius' not in st.session_state:
+        st.session_state.radius = 50  # 기본 반경 50km
     
     # 사이드바 설정
     with st.sidebar:
@@ -203,9 +211,7 @@ def display_accumulated_map():
     # 관광지 데이터 처리
     if st.session_state.all_tourist_spots and show_tourist_spots:
         # 모든 관광지를 하나의 리스트로 평탄화
-        all_tourist_spots = []
-        for spots_group in st.session_state.all_tourist_spots:
-            all_tourist_spots.extend(spots_group)
+        all_tourist_spots = st.session_state.all_tourist_spots
         
         # 필터링 적용
         filtered_spots = get_nearby_places(
@@ -214,7 +220,7 @@ def display_accumulated_map():
             center[1],
             radius
         )
-        
+
         for spot in filtered_spots:
             all_places.append({
                 '이름': spot['관광지명'],
@@ -279,7 +285,7 @@ def display_accumulated_map():
             else:
                 # 출발지/도착지 선택
                 calc_col1, calc_col2 = st.columns(2)
-                
+                            
                 place_names = [place['이름'] for place in all_places]
                 
                 with calc_col1:
@@ -329,6 +335,7 @@ def display_accumulated_map():
             
             # 장소 목록
             st.subheader("📍 장소 목록")
+
             df_places = pd.DataFrame(all_places)
             if not df_places.empty:
                 st.dataframe(
