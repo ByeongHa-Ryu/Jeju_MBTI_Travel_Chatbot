@@ -2,3 +2,5 @@
  Chatbot using RAG focused on Jeju traveling Guide based on user's MBTI
 
 - for 2024 big_contest 
+
+streamlit run 🍊JMT.py
