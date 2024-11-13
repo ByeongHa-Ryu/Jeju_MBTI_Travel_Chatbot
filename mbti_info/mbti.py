@@ -4,7 +4,7 @@ import streamlit as st
 def load_mbti_info(mbti_type):
     """MBTI 정보를 JSON 파일에서 읽어오는 함수"""
     try:
-        with open('mbti_info.json', 'r', encoding='utf-8') as file:
+        with open('mbti_info/mbti_info.json', 'r', encoding='utf-8') as file:
             mbti_data = json.load(file)
             return mbti_data.get(mbti_type, {
                 "nickname": "제주 탐험가",
