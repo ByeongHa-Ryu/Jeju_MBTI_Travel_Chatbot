@@ -1,6 +1,9 @@
 import streamlit as st 
 from PIL import Image
 from chatbot_arch.callout_form import *
+from mbti_info.mbti import *
+from langchain.memory import ConversationTokenBufferMemory
+
 # """
 # 연한 주황색:
 # #FFF5E6 (아주 연한 주황)
@@ -82,7 +85,7 @@ st.markdown(
     .stTextInput>div>div>input {
         background-color: #FF8C00;
         border-color: #FFA500;
-        color: #FF8C00;
+        color: #000000; # 테두리
     }
     
     /* 경고 메시지 스타일링 */
@@ -96,21 +99,42 @@ st.markdown(
         color: #000000 !important;
     }
 
-    /* 채팅 입력창 스타일링 */
-    .stChatInputContainer, [data-testid="stChatInput"] {
-        background-color: #FFB366 !important;
-        padding: 10px;
-        border-radius: 10px;
-        margin-top: 10px;
+    /* 지도 페이지 버튼 스타일 */
+    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"]:not([aria-selected="true"]) {
+        background-color: #e3f2fd;  /* 연한 하늘색 배경 */
+        border-left: 4px solid #2196F3;
     }
     
-    /* 채팅 메시지 컨테이너 스타일링 */
-    .stChatMessageContent {
-        background-color: #FFE5CC;
-        color: #000000 !important;
-        border-radius: 10px;
-        padding: 10px;
+    /* 지도 페이지가 선택됐을 때 스타일 */
+    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"][aria-selected="true"] {
+        background-color: #2196F3;  /* 진한 하늘색 배경 */
+        color: white;
+        border-left: 4px solid #1976D2;  /* 더 진한 하늘색 보더 */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
 
+   /* 애니메이션 정의 */
+    @keyframes slideIn {
+        from {
+            transform: translateX(-10px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    /* 사이드바 네비게이션 아이템 애니메이션 */
+    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao {
+        animation: slideIn 0.3s ease-out;
+        transition: all 0.3s ease;
+    }
+    
+    /* 호버 효과 */
+    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao:hover {
+        transform: scale(1.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
     }
@@ -123,7 +147,7 @@ st.markdown(
 
 # 세션 상태 초기화 
 if "memory" not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory()
+    st.session_state.memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=3000)
 
 if "mbti" not in st.session_state:
     st.session_state.mbti = ""  # MBTI 초기값
@@ -145,6 +169,14 @@ with st.sidebar:
 
     st.subheader("Jeju MBTI Travel Guide, JMT")
 
+    #월 입력
+    months = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+
+    # MBTI 입력 위에 월 선택 추가
+    selected_month = st.sidebar.selectbox("여행 시기를 선택하세요", months)
+    if 'selected_month' not in st.session_state:
+        st.session_state.month = selected_month
+    
     # MBTI 입력값 유지 및 처리
     mbti_input = st.text_input("당신의 MBTI를 대문자로 입력해주세요!", value=st.session_state.mbti)
 
@@ -152,57 +184,36 @@ with st.sidebar:
         if validate_mbti(mbti_input):
             st.session_state.mbti = mbti_input.upper()  # 입력값 세션 상태에 저장
             st.session_state.messages = [{"role": "assistant", "content": f"안녕하세요! {st.session_state.mbti}유형이시군요! 제주도 맛집에 대해 무엇이든 물어보세요 🍊"}]
-            st.sidebar.success("혼저옵서예~")
+            st.sidebar.success("🍊혼저옵서예🍊")
         else:
             st.sidebar.error("유효하지 않은 MBTI 형식입니다.")
 
     if st.session_state.mbti:
         st.sidebar.markdown(
-            f"<h3 style='color:orange;'>당신의 MBTI: {st.session_state.mbti}</h3>",
+            f"<h3 style='color:orange;'>당신의 MBTI: {st.session_state.mbti}🪂</h3>",
             unsafe_allow_html=True,
         )
+    
 
     if st.button("대화 초기화"):
         clear_chat_history()
+        st.rerun()
 
 # 메인 화면 - MBTI 입력 전
 
 if not st.session_state.mbti:
     st.title("제주도 맛집 추천 챗봇 JMT입니다! 👋")
-    st.subheader("MBTI서비스를 원하신다면 MBTI를 입력해주세요!")
+    st.subheader("당신의 MBTI를 입력해주세요!")
     
     # MBTI 입력 전 메시지 표시
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
     
-    user_input = st.chat_input("일반 맛집 추천받기 (예: 제주도 흑돼지 맛집 추천해주세요!)🍊")      
-    # 사용자 입력이 있을 때 처리
-    if user_input:
-        # 사용자 메시지 표시
-        with st.chat_message("user"):
-            st.write(user_input)
-        
-        # 사용자 메시지를 세션에 저장
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        # AI 응답 생성
-        with st.chat_message("assistant"):
-            with st.spinner("JMT가 생각 중이에요...🤔"):
-                try:
-                    response = Callout(message=user_input, memory=st.session_state.memory)
-                    st.write(response)
-                    # AI 응답을 세션에 저장
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.session_state.memory.save_context({"user": user_input}, {"bot": response})
-
-                except Exception as e:
-                    error_message = f"에러가 발생했습니다: {e}"
-                    st.write(error_message)
-                    st.session_state.messages.append({"role": "assistant", "content": error_message})
 # 메인 화면 - MBTI 입력 후
 else:    
-    st.title(f"안녕하세요, {st.session_state.mbti}님! 👋")
+    st.title(f"{st.session_state.month} {st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요! 👋")
+    display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")
 
     # 기존 메시지들 표시
@@ -226,7 +237,7 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("JMT가 생각 중이에요...🤔"):
                 try:
-                    response = Callout(message=user_input, memory=st.session_state.memory)
+                    response = Callout(message=user_input, memory=st.session_state.memory, user_mbti = st.session_state.mbti, month = st.session_state.month[0])
                     st.write(response)
                     # AI 응답을 세션에 저장
                     st.session_state.messages.append({"role": "assistant", "content": response})

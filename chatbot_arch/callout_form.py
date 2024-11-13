@@ -1,15 +1,25 @@
 import os
 from contextlib import redirect_stdout
 import io
-from prompts import *
-from blocks_and_functions import *
+from chatbot_arch.prompts import *
+# from blocks_and_functions import *
+import streamlit as st
+from streamlit_folium import folium_static
+import google.generativeai as genai
+from langchain.vectorstores import FAISS
+from streamlit_folium import st_folium
+import os
+from contextlib import redirect_stdout
+import io
+from chatbot_arch.blocks_and_functions import *
 
 
-def Callout(message,memory):
+
+## user_mbti
+def Callout(message, memory, user_mbti, month):
     try:
         # Query classification 
         classification_response = llm.invoke(input=cls_llm_inst.format(input_query=message,memory = memory,few_shot_prompt_for_cls=few_shot_prompt_for_cls))
-
         if "분석 관련" in classification_response:
             
             f = io.StringIO()
@@ -30,34 +40,47 @@ def Callout(message,memory):
                     )
             )
         
-        
-        elif "추천 관련" in classification_response: 
-            metadata_for_yj=[]
-            docs = retriever.invoke(message,config=config)
-            context = ""
+        ### 여기 변경
+
+        elif "추천 관련" in classification_response:
+            try:
+                final_response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
+                # Process recommendation                
+                if restaurants_data is not None and tourist_spots is not None:
+                    # Create containers if they don't exist
+                    if 'title_container' not in st.session_state:
+                        st.session_state.title_container = st.container()
+                    if 'info_section' not in st.session_state:
+                        st.session_state.info_section = st.container()
+                    
+                    # Display title
+                    with st.session_state.title_container:
+                        st.subheader("🗺️ 추천 맛집과 주변 관광지")
+                    
+                return final_response
+                
+            except Exception as e:
+                return f"맛집 추천 처리 중 에러가 발생했습니다: {e}"
             
-            for doc in docs:
-                context += doc.page_content + "\n"
-                metadata_for_yj.append(doc.metadata)
+        elif "부가 질문" in classification_response:
 
-            #metadata_for_yj = list(set(metadata_for_yj))
+            response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
+
             final_response = llm.invoke(
-            input = post_rag_inst.format(
-                memory = memory,
-                input_query = message,
-                context = context
+                input=question_inst.format(
+                    input_query = message,
+                    memory = memory,
+                    restaurants = restaurants_data,
+                    tour = tourist_spots
+                    )
             )
-            )
-
+        
         else:
-
             final_response = llm.invoke(
                 input=main_persona.format(input_query=message,memory = memory)
             )
-            
 
     except Exception as e:
         final_response = f"에러가 발생했습니다: {e}"
 
     return final_response
-
