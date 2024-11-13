@@ -114,14 +114,15 @@ def retrieve_mct(loaded_db, query):
            "lambda_mult": 0.8
        }
    )
-   query = f"{query} {st.session_state.get('mbti', '')}"
+   query = f"{query}"
+   print('query: ', query)
    return retriever.get_relevant_documents(query)
 
 def load_faiss_and_search(query, mbti, month, k=3,):
     try:
         loaded_db = load_df(mbti, month)
         retrieve_documents = retrieve_mct(loaded_db, query)
-
+        print(retrieve_documents)
         search_results = []
         for doc in retrieve_documents:
             metadata = doc.metadata
@@ -140,6 +141,7 @@ def load_faiss_and_search(query, mbti, month, k=3,):
                     '위도': np.nan,
                     '경도': np.nan,
                 })
+  
         return search_results
         
     except Exception as e:
@@ -171,8 +173,8 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
                         break
                         
             restaurants_data.append(restaurant_info)
-                
-        return pd.DataFrame(restaurants_data)
+        restaurants = pd.DataFrame(restaurants_data)
+        return restaurants
 
     except Exception as e:
         st.error(f"음식점 정보 조회 중 오류 발생: {str(e)}")
@@ -331,7 +333,6 @@ def format_restaurant_and_tourist_response(restaurants_df, tourist_spots):
                 ]
             }
             formatted_data.append(restaurant_info)
-        print(formatted_data)
         return formatted_data
         
     except Exception as e:
@@ -373,15 +374,19 @@ def process_recommendation(message, mbti, month):
         user_mbti = st.session_state.get('mbti', None)
         response = generate_llm_response(message, formatted_data, user_mbti)
 
+        print('restaurants_data: ', restaurants_data)
+        print('response: ', response)
         # 세션 스테이트에 누적 저장
         # 중복제거
         if 'all_restaurants' not in st.session_state:
             mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
+            print(mask)
             filtered_restaurants = restaurants_data[mask]
             st.session_state.all_restaurants = filtered_restaurants
 
         else:
             mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
+            print(mask)
             filtered_restaurants = restaurants_data[mask]
 
             # 필터링된 데이터를 기존 데이터와 합치기
@@ -398,6 +403,7 @@ def process_recommendation(message, mbti, month):
     
         if 'all_tourist_spots' not in st.session_state:
             tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
+            print('tourist_spots_filter: ',tourist_spots_filter)
             deduplicated_dict = {}
             for item in tourist_spots_filter:
                 tourist_spot = item['관광지명']
@@ -409,8 +415,9 @@ def process_recommendation(message, mbti, month):
 
         else:
             # 두 데이터를 합치기
-            merged_data = st.session_state.all_tourist_spots + tourist_spots_lst
-            
+            tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
+            merged_data = st.session_state.all_tourist_spots + tourist_spots_filter
+
             # 관광지명을 키로 하는 딕셔너리 생성
             # 딕셔너리를 사용하면 자동으로 중복이 제거됨
             deduplicated_dict = {}

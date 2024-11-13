@@ -21,7 +21,7 @@ from langchain.memory import ConversationTokenBufferMemory
 # #D35400 (호박색)
 # """
 # page config 
-st.set_page_config(page_title="🍊MBTI 기반의 제주도 맛집 추천 챗봇! JMT")
+st.set_page_config(page_title="🍊MBTI 기반의 제주도 맛집 추천 챗봇! JMT", layout='wide')
 
 ## CSS 
 st.markdown(
@@ -137,7 +137,6 @@ st.markdown(
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -199,51 +198,97 @@ with st.sidebar:
         clear_chat_history()
         st.rerun()
 
-# 메인 화면 - MBTI 입력 전
+
+def extract_restaurant_info(response):
+    """
+    AI 응답에서 맛집 정보를 추출하여 데이터프레임으로 변환하는 함수
+    """
+    data = {
+        "맛집명": ["맛있는 식당", "행복한 식당"],
+        "주소": ["제주시 XX로 123", "서귀포시 YY로 456"],
+        "대표메뉴": ["흑돼지구이", "해물탕"],
+        "가격대": ["30,000원", "25,000원"],
+        "평점": ["4.5/5", "4.3/5"]
+    }
+    return pd.DataFrame(data)
 
 if not st.session_state.mbti:
+    st.markdown('<div class="title-container">', unsafe_allow_html=True)
     st.title("제주도 맛집 추천 챗봇 JMT입니다! 👋")
     st.subheader("당신의 MBTI를 입력해주세요!")
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    # MBTI 입력 전 메시지 표시
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+    st.markdown('</div>', unsafe_allow_html=True)
     
-# 메인 화면 - MBTI 입력 후
 else:    
+    st.markdown('<div class="title-container">', unsafe_allow_html=True)
     st.title(f"{st.session_state.month} {st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요! 👋")
     display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # 기존 메시지들 표시
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-            
-    # 채팅 입력창        
+    # Create two columns
+    col1, col2 = st.columns([7, 3])
+
+    # Chat container (left column)
+    with col1:
+        chat_container = st.container()
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        with chat_container:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.write(message["content"])
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Restaurant info (right column)
+    with col2:
+        st.markdown('<div class="right-column">', unsafe_allow_html=True)
+        st.subheader("🍽️ 추천 맛집 정보")
+        
+        if 'current_restaurants' in st.session_state and st.session_state.current_restaurants is not None:
+            # 데이터프레임 스타일링
+            st.dataframe(
+                st.session_state.current_restaurants,
+                hide_index=True,
+                use_container_width=True,
+                height=400
+            )
+        else:
+            st.info("맛집을 추천받으면 이곳에 정보가 표시됩니다! 🍽️")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Fixed chat input at bottom
+    st.markdown('<div class="fixed-chat-input">', unsafe_allow_html=True)
     user_input = st.chat_input("맛집 추천받기 (예: 제주도 흑돼지 맛집 추천해주세요!)🍊")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # 사용자 입력이 있을 때 처리
     if user_input:
-        # 사용자 메시지 표시
-        with st.chat_message("user"):
-            st.write(user_input)
-        
-        # 사용자 메시지를 세션에 저장
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        # AI 응답 생성
-        with st.chat_message("assistant"):
-            with st.spinner("JMT가 생각 중이에요...🤔"):
-                try:
-                    response = Callout(message=user_input, memory=st.session_state.memory, user_mbti = st.session_state.mbti, month = st.session_state.month[0])
-                    st.write(response)
-                    # AI 응답을 세션에 저장
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.session_state.memory.save_context({"user": user_input}, {"bot": response})
+        with chat_container:
+            with st.chat_message("user"):
+                st.write(user_input)
+            
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            with st.chat_message("assistant"):
+                with st.spinner("JMT가 생각 중이에요...🤔"):
+                    try:
+                        response = Callout(message=user_input, memory=st.session_state.memory, user_mbti=st.session_state.mbti, month=st.session_state.month[0])
+                        st.write(response)
+                        
+                        restaurant_data = extract_restaurant_info(response)
+                        
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                        st.session_state.memory.save_context({"user": user_input}, {"bot": response})
+                        st.session_state.current_restaurants = restaurant_data
 
-                except Exception as e:
-                    error_message = f"에러가 발생했습니다: {e}"
-                    st.write(error_message)
-                    st.session_state.messages.append({"role": "assistant", "content": error_message})
+                    except Exception as e:
+                        error_message = f"에러가 발생했습니다: {e}"
+                        st.write(error_message)
+                        st.session_state.messages.append({"role": "assistant", "content": error_message})
+
+
