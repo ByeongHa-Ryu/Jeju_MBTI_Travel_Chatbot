@@ -8,115 +8,147 @@ from haversine import haversine
 # 페이지 설정
 st.set_page_config(page_title="🗺️ 제주도 지도", layout="wide")
 
-# CSS 스타일 적용 (메인 페이지와 동일한 스타일)
 # CSS 스타일 적용
 st.markdown(
-   """
-   <style>
-   /* 메인 배경 색상 */
-   .stApp {
-       background-color: #E6F3FF;  /* 연한 하늘색 */
+  """
+  <style>
+  /* 폰트 임포트 */
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Poor+Story&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
+  /* 기본 폰트 적용 */
+  * {
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+
+  /* 제목 폰트 */
+  .st-emotion-cache-10trblm {
+      font-family: 'Jua', sans-serif !important;
+      font-size: 1.8rem !important;
+  }
+
+  /* 서브헤더 폰트 */
+  .st-emotion-cache-1629p8f {
+      font-family: 'Poor Story', cursive;
+  }
+
+  /* 특정 텍스트 요소에 폰트 적용 */
+  h1, h2, h3 {
+      font-family: 'Jua', sans-serif !important;
+  }
+  
+  /* 메인 배경 색상 */
+  .stApp {
+      background-color: #E6F3FF;  /* 연한 하늘색 */
+  }
+  
+  /* 사이드바 스타일링 */
+  [data-testid="stSidebar"] {
+      background-color: #ADD8E6;  /* 연한 파란색 */
+  }
+  
+  [data-testid="stSidebar"] > div {
+      background-color: #ADD8E6;
+      padding: 1rem;
+  }
+  
+  /* 모든 텍스트 요소에 대한 기본 색상 설정 */
+  p, h1, h2, h3, h4, h5, h6, .stMarkdown, span, li, label, .stSelectbox, 
+  .stMultiSelect, [data-testid="stMarkdownContainer"] p {
+      color: #1E3A8A !important;  /* 진한 파란색 */
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+  
+  /* 선택된 옵션의 텍스트 색상 */
+  .stSelectbox > div > div > div {
+      color: #87CEFA !important;
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+  
+  /* 드롭다운 메뉴 항목의 텍스트 색상 */
+  .stSelectbox > div > div > ul > li {
+      color: #87CEFA !important;
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+  
+  /* 멀티셀렉트 선택된 항목 텍스트 */
+  .stMultiSelect > div > div > div {
+      color: #87CEFA !important;
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+  
+  /* 버튼 스타일링 */
+  .stButton>button {
+      background-color: #87CEFA !important;
+      color: white !important;
+      font-weight: bold;
+      border: none;
+      font-family: 'Poor Story', cursive;
+      font-size: 1.1rem;
+  }
+  
+  /* 선택박스 스타일링 */
+  .stSelectbox, .stMultiSelect {
+      background-color: white;
+      color: white;
+      font-family: 'Noto Sans KR', sans-serif;
+  }
+  
+  /* 성공 메시지 스타일링 */
+  .stSuccess {
+      background-color: #E0FFFF;  /* 연한 청록색 */
+  }
+  
+  /* 정보 메시지 스타일링 */
+  .stInfo {
+      background-color: #87CEFA;  /* 앨리스블루 */
+  }
+
+  /* 지도 페이지 버튼 스타일 */
+   [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"]:not([aria-selected="true"]) {
+       background-color: #e3f2fd;
+       border-left: 4px solid #2196F3;
+       font-family: 'Jua', sans-serif;
    }
    
-   /* 사이드바 스타일링 */
-   [data-testid="stSidebar"] {
-       background-color: #ADD8E6;  /* 연한 파란색 */
-   }
-   
-   [data-testid="stSidebar"] > div {
-       background-color: #ADD8E6;
-       padding: 1rem;
-   }
-   
-   /* 모든 텍스트 요소에 대한 기본 색상 설정 */
-   p, h1, h2, h3, h4, h5, h6, .stMarkdown, span, li, label, .stSelectbox, 
-   .stMultiSelect, [data-testid="stMarkdownContainer"] p {
-       color: #1E3A8A !important;  /* 진한 파란색 */
-   }
-   
-   /* 선택된 옵션의 텍스트 색상 */
-   .stSelectbox > div > div > div {
-       color: #87CEFA !important;
-   }
-   
-   /* 드롭다운 메뉴 항목의 텍스트 색상 */
-   .stSelectbox > div > div > ul > li {
-       color: #87CEFA !important;
-   }
-   
-   /* 멀티셀렉트 선택된 항목 텍스트 */
-   .stMultiSelect > div > div > div {
-       color: #87CEFA !important;
-   }
-   
-   /* 버튼 스타일링 */
-   .stButton>button {
-       background-color: #87CEFA !important;  /* 
-       color: white !important;
-       font-weight: bold;
-       border: none;
-   }
-   
-   /* 선택박스 스타일링 */
-   .stSelectbox, .stMultiSelect {
-       background-color:  white;  /* 앨리스블루 */
-       color: white
-   }
-   
-   /* 성공 메시지 스타일링 */
-   .stSuccess {
-       background-color: #E0FFFF;  /* 연한 청록색 */
-   }
-   
-   /* 정보 메시지 스타일링 */
-   .stInfo {
-       background-color: #87CEFA;  /* 앨리스블루 */
+   /* 지도 페이지가 선택됐을 때 스타일 */
+   [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"][aria-selected="true"] {
+       background-color: #87CEFA;
+       color: white;
+       border-left: 4px solid #1976D2;
+       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+       font-family: 'Jua', sans-serif;
    }
 
-   /* 지도 페이지 버튼 스타일 */
-    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"]:not([aria-selected="true"]) {
-        background-color: #e3f2fd;  /* 연한 하늘색 배경 */
-        border-left: 4px solid #2196F3;
-    }
-    
-    /* 지도 페이지가 선택됐을 때 스타일 */
-    [data-testid="stSidebarNav"] a[href="🗺️_제주도_지도"][aria-selected="true"] {
-        background-color: #87CEFA;  /* 
-        color: white;
-        border-left: 4px solid #1976D2;  /* 더 진한 하늘색 보더 */
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-
-   /* 애니메이션 정의 */
-    @keyframes slideIn {
-        from {
-            transform: translateX(-10px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    /* 사이드바 네비게이션 아이템 애니메이션 */
-    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao {
-        animation: slideIn 0.3s ease-out;
-        transition: all 0.3s ease;
-    }
-    
-    /* 호버 효과 */
-    [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao:hover {
-        transform: scale(1.02);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
+  /* 애니메이션 정의 */
+   @keyframes slideIn {
+       from {
+           transform: translateX(-10px);
+           opacity: 0;
+       }
+       to {
+           transform: translateX(0);
+           opacity: 1;
+       }
+   }
    
-   </style>
-   """,
-   unsafe_allow_html=True,
+   /* 사이드바 네비게이션 아이템 애니메이션 */
+   [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao {
+       animation: slideIn 0.3s ease-out;
+       transition: all 0.3s ease;
+   }
+   
+   /* 호버 효과 */
+   [data-testid="stSidebarNav"] .st-emotion-cache-1oe5cao:hover {
+       transform: scale(1.02);
+       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+   }
+  
+  </style>
+  """,
+  unsafe_allow_html=True,
 )
-
-
 
 def get_nearby_places(data, center_lat, center_lng, radius):
     """중심점으로부터 특정 반경 내의 장소들을 필터링하는 함수"""
