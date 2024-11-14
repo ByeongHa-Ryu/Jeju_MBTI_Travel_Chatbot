@@ -120,27 +120,16 @@ st.markdown(
 
 def get_nearby_places(data, center_lat, center_lng, radius):
     """중심점으로부터 특정 반경 내의 장소들을 필터링하는 함수"""
-    if isinstance(data, pd.DataFrame):
-        data['distance'] = data.apply(
-            lambda row: haversine(
-                (center_lat, center_lng), 
-                (row['위도'], row['경도']), 
-                unit='km'
-            ), 
-            axis=1
+    filtered_spots = []
+    for spot in data:
+        distance = haversine(
+            (center_lat, center_lng),
+            (float(spot['위도']), float(spot['경도'])),
+            unit='km'
         )
-        return data[data['distance'] <= radius].copy()
-    else:  # list of spots
-        filtered_spots = []
-        for spot in data:
-            distance = haversine(
-                (center_lat, center_lng),
-                (float(spot['위도']), float(spot['경도'])),
-                unit='km'
-            )
-            if distance <= radius:
-                filtered_spots.append(spot)
-        return filtered_spots
+        if distance <= radius:
+            filtered_spots.append(spot)
+    return filtered_spots
 
 def display_accumulated_map():
     st.title("📍 추천 맛집 & 관광지 지도")
@@ -150,7 +139,7 @@ def display_accumulated_map():
     
     # 세션 상태 초기화
     if 'all_restaurants' not in st.session_state:
-        st.session_state.all_restaurants = pd.DataFrame()
+        st.session_state.all_restaurants = []
     if 'all_tourist_spots' not in st.session_state:
         st.session_state.all_tourist_spots = []
     if 'selected_place' not in st.session_state:
@@ -189,23 +178,24 @@ def display_accumulated_map():
     center = center_options[selected_center]
     
     # 맛집과 관광지 데이터 처리 (기존 코드와 동일)
-    if not st.session_state.all_restaurants.empty and show_restaurants:
+    if st.session_state.all_restaurants and show_restaurants:
+        all_restaurants = st.session_state.all_restaurants
         filtered_restaurants = get_nearby_places(
-            st.session_state.all_restaurants, 
+            all_restaurants, 
             center[0], 
             center[1], 
             radius
         )
-        for _, row in filtered_restaurants.iterrows():
+        for restaurant in filtered_restaurants:
             all_places.append({
-                '이름': row['음식점명'],
+                '이름': restaurant['음식점명'],
                 '유형': '맛집',
-                '위도': float(row['위도']),
-                '경도': float(row['경도']),
-                '주소': row['주소'],
-                '업종': row['업종']
+                '위도': float(restaurant['위도']),
+                '경도': float(restaurant['경도']),
+                '주소': restaurant['주소'],
+                '업종': restaurant['업종']
             })
-    
+
     if st.session_state.all_tourist_spots and show_tourist_spots:
         all_tourist_spots = st.session_state.all_tourist_spots
         filtered_spots = get_nearby_places(
@@ -225,36 +215,38 @@ def display_accumulated_map():
             })
     
     if all_places:
-        # 지도 생성 부분 수정
         with col1:
-            center = center_options[selected_center]
-            zoom_level = 10 if selected_center == '제주도 전체' else 12
-            m = folium.Map(location=center, zoom_start=zoom_level)
-            
-            if selected_center != '제주도 전체':
-                folium.Circle(
-                    location=center,
-                    radius=radius * 1000,
-                    color="gray",
-                    fill=True,
-                    opacity=0.2
-                ).add_to(m)
-            
-            # 선택된 장소가 있으면 해당 위치로 지도 중심 이동
+            # 먼저 선택된 장소가 있는지 확인
             if st.session_state.selected_place:
                 selected_place_data = next(
                     (p for p in all_places if p['이름'] == st.session_state.selected_place),
                     None
                 )
                 if selected_place_data:
+                    # 선택된 장소가 있으면 해당 위치로 지도 생성
                     m = folium.Map(
                         location=[selected_place_data['위도'], selected_place_data['경도']],
-                        zoom_start=15  # 더 가깝게 확대
+                        zoom_start=15
                     )
+            else:
+                # 선택된 장소가 없을 때는 기본 중심점으로 지도 생성
+                center = center_options[selected_center]
+                zoom_level = 10 if selected_center == '제주도 전체' else 12
+                m = folium.Map(location=center, zoom_start=zoom_level)
+                
+                # 반경 원 표시 (제주도 전체가 아닐 때만)
+                if selected_center != '제주도 전체':
+                    folium.Circle(
+                        location=center,
+                        radius=radius * 1000,
+                        color="gray",
+                        fill=True,
+                        opacity=0.2
+                    ).add_to(m)
             
             # 마커 클러스터 생성
             marker_cluster = plugins.MarkerCluster().add_to(m)
-            
+                
             # 마커 추가
             for place in all_places:
                 try:
@@ -282,93 +274,9 @@ def display_accumulated_map():
                         ).add_to(marker_cluster)
                 except (ValueError, TypeError):
                     continue
-        # with col1:
-        #     # 지도 생성
-        #     center = center_options[selected_center]
-        #     zoom_level = 10 if selected_center == '제주도 전체' else 12
-        #     m = folium.Map(location=center, zoom_start=zoom_level)
-            
-        #     if selected_center != '제주도 전체':
-        #         folium.Circle(
-        #             location=center,
-        #             radius=radius * 1000,
-        #             color="gray",
-        #             fill=True,
-        #             opacity=0.2
-        #         ).add_to(m)
-            
-        #     # 마커 클러스터 생성
-        #     marker_cluster = plugins.MarkerCluster().add_to(m)
-            
-        #     # 마커 추가
-        #     for place in all_places:
-        #         try:
-        #             marker_color = 'red' if place['유형'] == '맛집' else 'blue'
-        #             icon_type = 'cutlery' if place['유형'] == '맛집' else 'info-sign'
-                    
-        #             lat = float(place['위도'])
-        #             lng = float(place['경도'])
-                    
-        #             if not (32 <= lat <= 34) or not (126 <= lng <= 127):
-        #                 continue
-                    
-        #             # 선택된 장소인 경우 특별한 마커 스타일 적용
-        #             if st.session_state.selected_place and st.session_state.selected_place == place['이름']:
-        #                 # 선택된 장소는 큰 노란색 마커로 표시
-        #                 folium.Marker(
-        #                     location=[lat, lng],
-        #                     popup=f"<b>{place['이름']}</b><br>{place['주소']}<br>{place['업종']}",
-        #                     tooltip=f"🌟 {place['이름']}",
-        #                     icon=folium.Icon(color='yellow', icon='star', prefix='fa')
-        #                 ).add_to(m)
-        #                 # 선택된 장소로 지도 중심 이동
-        #                 m.location = [lat, lng]
-        #                 m.zoom_start = 14
-        #             else:
-        #                 # 일반 마커
-        #                 folium.Marker(
-        #                     location=[lat, lng],
-        #                     popup=f"<b>{place['이름']}</b><br>",
-        #                     tooltip=place['이름'],
-        #                     icon=folium.Icon(color=marker_color, icon=icon_type)
-        #                 ).add_to(marker_cluster)
-        #         except (ValueError, TypeError):
-        #             continue
-            
             # 지도 표시
             st.components.v1.html(m._repr_html_(), height=600)
-            
-            # 거리 계산기 (기존 코드와 동일)
-            # st.subheader("📏 거리 계산기")
-            # if len(all_places) < 2:
-            #     st.warning("거리 계산을 위해서는 2개 이상의 장소가 필요합니다.")
-            # else:
-            #     calc_col1, calc_col2 = st.columns(2)
-            #     place_names = [place['이름'] for place in all_places]
-                
-            #     with calc_col1:
-            #         start_place = st.selectbox("출발지", place_names, key="start_place")
-            #     with calc_col2:
-            #         end_places = [p for p in place_names if p != start_place]
-            #         end_place = st.selectbox("도착지", end_places, key="end_place")
-                
-            #     if st.button("거리 계산", use_container_width=True):
-            #         start_data = next(p for p in all_places if p['이름'] == start_place)
-            #         end_data = next(p for p in all_places if p['이름'] == end_place)
-                    
-            #         distance = haversine(
-            #             (start_data['위도'], start_data['경도']),
-            #             (end_data['위도'], end_data['경도']),
-            #             unit='km'
-            #         )
-                    
-            #         results_container = st.container()
-            #         with results_container:
-            #             st.success(f"📍 '{start_place}'에서 '{end_place}'까지")
-            #             st.write(f"🚗 거리: {distance:.1f}km")
-            #             time_minutes = (distance / 60) * 60
-            #             st.write(f"⏱️ 예상 소요시간: {int(time_minutes)}분 (평균 속도 60km/h 기준)")
-            # 거리 계산기 부분 수정
+
             st.subheader("📏 거리 계산기")
             if len(all_places) < 2:
                 st.warning("거리 계산을 위해서는 2개 이상의 장소가 필요합니다.")
@@ -466,7 +374,7 @@ def display_accumulated_map():
                 
                 # 장소 선택 드롭다운 추가
                 selected_place = st.selectbox(
-                    "장소 선택",
+                    "장소 선택 후 enter를 눌러주세요",
                     ["선택하세요..."] + list(df_places['이름']),
                     index=0
                 )

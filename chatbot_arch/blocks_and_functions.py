@@ -69,7 +69,20 @@ def clear_chat_history():
     st.session_state.map_center = [33.384, 126.551]  # 지도 중심 좌표 초기화
     st.session_state.radius = 50  # 반경 초기화 (제주도 전체 반경)
 
+#query로 retrieve
+def retrieve_mct(loaded_db, query):
+   retriever = loaded_db.as_retriever(
+       search_type="mmr", 
+       search_kwargs={
+           "k": 3,
+           "fetch_k": 20,
+           "lambda_mult": 0.8
+       }
+   )
+   query = f"{query}"
+   return retriever.get_relevant_documents(query)
 
+# 맛집 db load
 def load_df(mbti, month):
     model_name = "upskyy/bge-m3-Korean"
     model_kwargs = {'device': 'cpu'}
@@ -87,6 +100,7 @@ def load_df(mbti, month):
 
     return loaded_db
 
+# 관광지 db load
 def load_tour_df(mbti, month):
     model_name = "upskyy/bge-m3-Korean"
     model_kwargs = {'device': 'cpu'}
@@ -104,19 +118,7 @@ def load_tour_df(mbti, month):
 
     return loaded_tour_db
 
-
-def retrieve_mct(loaded_db, query):
-   retriever = loaded_db.as_retriever(
-       search_type="mmr", 
-       search_kwargs={
-           "k": 3,
-           "fetch_k": 20,
-           "lambda_mult": 0.8
-       }
-   )
-   query = f"{query}"
-   return retriever.get_relevant_documents(query)
-
+#추출된 맛집 데이터의 metadata와 pagecontents 추출
 def load_faiss_and_search(query, mbti, month, k=3,):
     try:
         loaded_db = load_df(mbti, month)
@@ -125,20 +127,13 @@ def load_faiss_and_search(query, mbti, month, k=3,):
         for doc in retrieve_documents:
             metadata = doc.metadata
             contents = doc.page_content
-            try:
-                search_results.append({
-                    'index': metadata['idx'],
-                    '정보' : contents,
-                    '위도': float(metadata['위도']) if pd.notna(metadata['위도']) else np.nan,
-                    '경도': float(metadata['경도']) if pd.notna(metadata['경도']) else np.nan,
-                })
-            except (ValueError, TypeError):
-                search_results.append({
-                    'index': metadata['idx'],
-                    '정보' : contents,
-                    '위도': np.nan,
-                    '경도': np.nan,
-                })
+
+            search_results.append({
+                'index': metadata['idx'],
+                '정보' : contents,
+                '위도': float(metadata['위도']) if pd.notna(metadata['위도']) else np.nan,
+                '경도': float(metadata['경도']) if pd.notna(metadata['경도']) else np.nan,
+            })
   
         return search_results
         
@@ -146,6 +141,7 @@ def load_faiss_and_search(query, mbti, month, k=3,):
         st.error(f"FAISS 검색 중 오류 발생: {str(e)}")
         return None
 
+# 맛집데이터의 상세정보를 index를 기준으로 csv에서 불러옴
 def get_restaurant_details(search_results, restaurants_df, mbti, month):
     try:
         restaurants_data = []
@@ -153,7 +149,7 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
         all_docs = restaurant_db.docstore._dict
         
         for result in search_results:
-            # Fixed: Added idx key access
+            # index기준으로 df에서 정보 가져옴
             if 'index' in result: # 재방문률
                 restaurant = restaurants_df.iloc[result['index']]
                 restaurant_info = {
@@ -164,55 +160,51 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
                 '위도': result['위도'],
                 '경도': result['경도'],
                 }
-
+            # db에서 가져온 page contents
             for doc in all_docs.values():
-                    if doc.metadata.get('idx') == result['index']:
-                        restaurant_info['상세설명'] = doc.page_content
-                        break
+                if doc.metadata.get('idx') == result['index']:
+                    restaurant_info['상세설명'] = doc.page_content
+                    break
                         
             restaurants_data.append(restaurant_info)
-        restaurants = pd.DataFrame(restaurants_data)
-        return restaurants
+
+        return restaurants_data
 
     except Exception as e:
         st.error(f"음식점 정보 조회 중 오류 발생: {str(e)}")
         return None
 
-def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, mbti, month, n=3):
+# 맛집의 위도와 경도를 받아서 관광지데이터와 거리를 모두 계산.
+def find_nearby_tourist_spots(restaurants_data, tourist_spots_df, mbti, month, n=3):
     try:
-        if pd.isna(restaurant_row['위도']) or pd.isna(restaurant_row['경도']):
-            return []
-
-        restaurant_coords = (restaurant_row['위도'], restaurant_row['경도'])
+        restaurant_df = pd.DataFrame(restaurants_data)
+        restaurant_coords = (restaurants_data['위도'], restaurants_data['경도'])
         distances = []
         matching_docs = []
-        for i, tourist in tourist_spots_df.iterrows():
-            if pd.isna(tourist['위도']) or pd.isna(tourist['경도']):
-                continue
-            try:
-                tourist_coords = (tourist['위도'], tourist['경도'])
-                distance = geodesic(restaurant_coords, tourist_coords).kilometers
-                
-                distances.append({
-                    '관광지명': tourist['관광지명'],
-                    '주소': tourist['주소'],
-                    '업종': tourist['소분류'],
-                    '위도': tourist['위도'],
-                    '경도': tourist['경도'],
-                    '거리': distance,
-                    'idx': i
-                })
 
-            except Exception as e:
-                print(f"거리 계산 중 오류 발생 (관광지: {tourist['관광지명']}): {str(e)}")
-                continue
-        
+        # tourist df랑 추출한 맛집 데이터랑 거리 계산
+        for i, tourist in tourist_spots_df.iterrows():
+            tourist_coords = (tourist['위도'], tourist['경도'])
+            distance = geodesic(restaurant_coords, tourist_coords).kilometers
+            
+            distances.append({
+                '관광지명': tourist['관광지명'],
+                '주소': tourist['주소'],
+                '업종': tourist['소분류'],
+                '위도': tourist['위도'],
+                '경도': tourist['경도'],
+                '거리': distance,
+                'idx': i
+            })
+
+        # 거리순으로 정렬해서 세개만
         sorting = sorted(distances, key=lambda x: x['거리'])[:n] if distances else []
 
+        # tourst db에서 page content 추출
         tourist_db = load_tour_df(mbti, month)
         all_docs = tourist_db.docstore._dict
         
-        result = []
+        tourist_data = []
         for spot in sorting:
             spot_info = spot.copy()  # 기존 거리 정보 복사
             
@@ -220,25 +212,24 @@ def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, mbti, month, n=3
             for doc in all_docs.values():
                 if doc.metadata.get('idx') == spot['idx']:
                     spot_info['상세설명'] = doc.page_content  # matching_docs 정보 추가
-                    result.append(spot_info)
+                    tourist_data.append(spot_info)
                     break
         
-        return result
+        return tourist_data
         
     except Exception as e:
         st.error(f"관광지 검색 중 오류 발생: {str(e)}")
         return []
 
-def create_map_with_restaurants_and_tourists(restaurants_df, tourist_spots):
+#지도 생성
+def create_map_with_restaurants_and_tourists(restaurants_data, tourist_spots):
     try:
+        restaurants_df = pd.DataFrame(restaurants_data)
         if restaurants_df is None or restaurants_df.empty:
             st.warning("맛집 데이터가 없습니다.")
             return None
         
         valid_locations = restaurants_df[restaurants_df['위도'].notna() & restaurants_df['경도'].notna()]
-        if valid_locations.empty:
-            st.warning("유효한 위치 데이터가 없습니다.")
-            return None
             
         center_lat = valid_locations.iloc[0]['위도']
         center_lng = valid_locations.iloc[0]['경도']
@@ -314,8 +305,9 @@ def display_map_with_data(map_obj):
 def create_cached_map(_restaurants_data, _tourist_spots):
     return create_map_with_restaurants_and_tourists(_restaurants_data, _tourist_spots)
 
-def format_restaurant_and_tourist_response(restaurants_df, tourist_spots):
+def format_restaurant_and_tourist_response(restaurants_data, tourist_spots):
     try:
+        restaurants_df = pd.DataFrame(restaurants_data)
         if restaurants_df is None or restaurants_df.empty:
             return "죄송합니다. 맛집을 찾을 수 없습니다."
             
@@ -337,7 +329,7 @@ def format_restaurant_and_tourist_response(restaurants_df, tourist_spots):
     except Exception as e:
         return f"정보 포매팅 중 오류 발생: {str(e)}"
 
-def generate_llm_response(query, formatted_data, user_mbti=None):
+def generate_llm_response(query, formatted_data, user_mbti):
     try:
         response = llm.invoke(
             input=recommend_inst.format(
@@ -356,46 +348,59 @@ def process_recommendation(message, mbti, month):
         restaurants_df = pd.read_csv(f"./chatbot_arch/data/mct_df/{mbti}/mct_{month}_{mbti}.csv")
         tourist_spots_df = pd.read_csv(f"./chatbot_arch/data/tour_df/{mbti}/tour_{month}_{mbti}.csv")
         
+        # 쿼리로 맛집 데이터 세개 검색
         search_results = load_faiss_and_search(message, mbti, month, k=3)
         if not search_results:
             return "죄송합니다. 해당하는 맛집을 찾을 수 없습니다.", None, None
-            
+        
+        # 맛집 데이터 정렬
         restaurants_data = get_restaurant_details(search_results, restaurants_df, mbti, month)
         if restaurants_data is None:
             return "음식점 정보를 가져오는데 실패했습니다.", None, None
-            
-        tourist_spots = []
-        for _, restaurant in restaurants_data.iterrows():
+        
+        # 관광지 데이터 정렬
+        tourist_spots_data = []
+        for _, restaurant in pd.DataFrame(restaurants_data).iterrows():
             nearby_spots = find_nearby_tourist_spots(restaurant, tourist_spots_df, mbti, month)
-            tourist_spots.append(nearby_spots)  
+            tourist_spots_data.append(nearby_spots)  
 
-        formatted_data = format_restaurant_and_tourist_response(restaurants_data, tourist_spots)
-        user_mbti = st.session_state.get('mbti', None)
-        response = generate_llm_response(message, formatted_data, user_mbti)
+        # 두 데이터 합쳐서 llm에 입력
+        formatted_data = format_restaurant_and_tourist_response(restaurants_data, tourist_spots_data)
+        response = generate_llm_response(message, formatted_data, mbti)
 
         # 세션 스테이트에 누적 저장
         # 중복제거
+        # 맛집 데이터
+
         if 'all_restaurants' not in st.session_state:
-            mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
-            filtered_restaurants = restaurants_data[mask]
-            st.session_state.all_restaurants = filtered_restaurants
-
+            restaurants_filter = [item for item in restaurants_data if item['음식점명'] in str(response)]
+            deduplicated_dict = {}
+            for item in restaurants_filter:
+                restaurant = item['음식점명']
+                # 같은 음식점명이 있을 경우 마지막 데이터로 덮어씌워짐
+                deduplicated_dict[restaurant] = item
+            # 딕셔너리의 값들을 리스트로 변환
+            st.session_state.all_restaurants = list(deduplicated_dict.values())
         else:
-            mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
-            filtered_restaurants = restaurants_data[mask]
+            # 두 데이터를 합치기
+            restaurants_filter = [item for item in restaurants_data if item['음식점명'] in str(response)]
+            merged_data = st.session_state.all_restaurants + restaurants_filter
+            deduplicated_dict = {}
+            for item in restaurants_filter:
+                restaurant = item['음식점명']
+                # 같은 음식점명이 있을 경우 마지막 데이터로 덮어씌워짐
+                deduplicated_dict[restaurant] = item
+            # 딕셔너리의 값들을 리스트로 변환
+            st.session_state.all_restaurants = list(deduplicated_dict.values())
 
-            # 필터링된 데이터를 기존 데이터와 합치기
-            st.session_state.all_restaurants = pd.concat(
-                [st.session_state.all_restaurants, filtered_restaurants],
-                ignore_index=True
-            ).drop_duplicates(subset=['음식점명'])
-
+        # 관광지 데이터
+        # [[{},{},{}],[{},{},{}]] => [{},{},{}, ...]
         tourist_spots_lst = []
         for i in range(3):
-            k = tourist_spots[i]
+            k = tourist_spots_data[i]
             for j in range(3):
                 tourist_spots_lst.append(k[j])
-    
+
         if 'all_tourist_spots' not in st.session_state:
             tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
             deduplicated_dict = {}
@@ -403,15 +408,12 @@ def process_recommendation(message, mbti, month):
                 tourist_spot = item['관광지명']
                 # 같은 관광지명이 있을 경우 마지막 데이터로 덮어씌워짐
                 deduplicated_dict[tourist_spot] = item
-            
             # 딕셔너리의 값들을 리스트로 변환
             st.session_state.all_tourist_spots = list(deduplicated_dict.values())
-
         else:
             # 두 데이터를 합치기
             tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
             merged_data = st.session_state.all_tourist_spots + tourist_spots_filter
-
             # 관광지명을 키로 하는 딕셔너리 생성
             # 딕셔너리를 사용하면 자동으로 중복이 제거됨
             deduplicated_dict = {}
@@ -419,12 +421,15 @@ def process_recommendation(message, mbti, month):
                 tourist_spot = item['관광지명']
                 # 같은 관광지명이 있을 경우 마지막 데이터로 덮어씌워짐
                 deduplicated_dict[tourist_spot] = item
-            
+
             # 딕셔너리의 값들을 리스트로 변환
             st.session_state.all_tourist_spots = list(deduplicated_dict.values())
 
-        return response, restaurants_data, tourist_spots
+        return response, restaurants_data, tourist_spots_data
         
     except Exception as e:
         print(f"Error in recommendation process: {e}")
         return f"처리 중 오류가 발생했습니다: {str(e)}", None, None
+
+def state():
+    return st.session_state.all_restaurants, st.session_state.all_tourist_spots

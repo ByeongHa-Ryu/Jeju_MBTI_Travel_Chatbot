@@ -63,15 +63,17 @@ def Callout(message, memory, user_mbti, month):
                 return f"맛집 추천 처리 중 에러가 발생했습니다: {e}"
             
         elif "부가 질문" in classification_response:
-
-            response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
+            print('부가질문')
+            restaurants_state, tourist_spots_state = state()
+            print('부가질문 : ',restaurants_state)
+            print('부가질문 : ',tourist_spots_state)
 
             final_response = llm.invoke(
                 input=question_inst.format(
                     input_query = message,
                     memory = memory,
-                    restaurants = restaurants_data,
-                    tour = tourist_spots
+                    restaurants = restaurants_state,
+                    tour = tourist_spots_state
                     )
             )
         

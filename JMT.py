@@ -200,7 +200,7 @@ with st.sidebar:
 
 
 if not st.session_state.mbti:
-    st.title("제주도 맛집 추천 챗봇 JMT입니다! 👋")
+    st.title("🍊제주도 맛집 추천 챗봇 JMT입니다!👋")
     st.subheader("당신의 MBTI를 입력해주세요!")
     
     # MBTI 입력 전 메시지 표시
