@@ -3,7 +3,7 @@ from langchain.agents.agent_types import AgentType
 from langchain_core.output_parsers import StrOutputParser,JsonOutputParser
 from langchain.memory import ConversationTokenBufferMemory
 from langchain_google_genai import GoogleGenerativeAI # type: ignore
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.runnables import ConfigurableField
 
@@ -115,14 +115,12 @@ def retrieve_mct(loaded_db, query):
        }
    )
    query = f"{query}"
-   print('query: ', query)
    return retriever.get_relevant_documents(query)
 
 def load_faiss_and_search(query, mbti, month, k=3,):
     try:
         loaded_db = load_df(mbti, month)
         retrieve_documents = retrieve_mct(loaded_db, query)
-        print(retrieve_documents)
         search_results = []
         for doc in retrieve_documents:
             metadata = doc.metadata
@@ -153,7 +151,7 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
         restaurants_data = []
         restaurant_db = load_df(mbti, month)
         all_docs = restaurant_db.docstore._dict
-
+        
         for result in search_results:
             # Fixed: Added idx key access
             if 'index' in result: # 재방문률
@@ -198,6 +196,7 @@ def find_nearby_tourist_spots(restaurant_row, tourist_spots_df, mbti, month, n=3
                 distances.append({
                     '관광지명': tourist['관광지명'],
                     '주소': tourist['주소'],
+                    '업종': tourist['소분류'],
                     '위도': tourist['위도'],
                     '경도': tourist['경도'],
                     '거리': distance,
@@ -374,19 +373,15 @@ def process_recommendation(message, mbti, month):
         user_mbti = st.session_state.get('mbti', None)
         response = generate_llm_response(message, formatted_data, user_mbti)
 
-        print('restaurants_data: ', restaurants_data)
-        print('response: ', response)
         # 세션 스테이트에 누적 저장
         # 중복제거
         if 'all_restaurants' not in st.session_state:
             mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
-            print(mask)
             filtered_restaurants = restaurants_data[mask]
             st.session_state.all_restaurants = filtered_restaurants
 
         else:
             mask = restaurants_data['음식점명'].apply(lambda x: x in str(response))
-            print(mask)
             filtered_restaurants = restaurants_data[mask]
 
             # 필터링된 데이터를 기존 데이터와 합치기
@@ -403,7 +398,6 @@ def process_recommendation(message, mbti, month):
     
         if 'all_tourist_spots' not in st.session_state:
             tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
-            print('tourist_spots_filter: ',tourist_spots_filter)
             deduplicated_dict = {}
             for item in tourist_spots_filter:
                 tourist_spot = item['관광지명']
