@@ -6,7 +6,7 @@ from chatbot_arch.prompts import *
 import streamlit as st
 from streamlit_folium import folium_static
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from streamlit_folium import st_folium
 import os
 from contextlib import redirect_stdout
@@ -50,7 +50,7 @@ def Callout(message, memory, user_mbti, month):
         elif "추천 관련" in classification_response:
             try:
 
-                final_response, _, _ = process_recommendation(message, user_mbti, month)
+                final_response, _, _ = process_recommendation(message, user_mbti, month, memory)
                 # final_response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
                 # write_log('******************************** \n')
                 # write_log('query : ' + message+' \n')

@@ -27,15 +27,6 @@ st.set_page_config(page_title="🍊MBTI 기반의 제주도 맛집 추천 챗봇
 st.markdown(
     """
     <style>
-    /* 폰트 임포트 */
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Poor+Story&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
-
-    /* 기본 폰트 적용 */
-    * {
-        font-family: 'Noto Sans KR', sans-serif;
-    }
 
     /* 제목 폰트 - 여러 가능한 클래스명 시도 */
     .st-emotion-cache-10trblm {
@@ -108,7 +99,6 @@ st.markdown(
         font-weight: bold;
         line-height: 1.4;
         color: #000000;
-        font-family: 'Jua', sans-serif;
     }
     
     section[data-testid="stSidebar"] .stButton > button {
@@ -243,7 +233,7 @@ st.markdown(
 st.markdown(
     """
     <div class="title-container">
-        <h1 style='font-family: "Black Han Sans", sans-serif; color: #FF8C00; margin: 0;'>
+        <h1 style='color: #FF8C00; margin: 0;'>
                🍊 JEJU MBTI TRAVEL 🍊
         </h1>
     </div>
@@ -266,14 +256,22 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.markdown(
         """
-        <div class="sidebar-title">
+        <div style='font-size: 20px; font-weight: bold; color: #FF8C00;'>
             🍊JMT🍊<br>MBTI 제주도 맛집 추천 챗봇
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.subheader("Jeju MBTI Travel, JMT")
+    st.markdown(
+        """
+        <h3 style='color: #000000;'>
+            Jeju MBTI Travel, JMT
+        </h3>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
     #월 입력
     months = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
@@ -308,7 +306,14 @@ with st.sidebar:
 
 if not st.session_state.mbti:
     st.title("JMT와 함께 제주도로 떠나볼까요?👋")
-    st.subheader("당신의 MBTI를 입력해주세요!")
+    st.markdown(
+    """
+    <h3 style='color: #FF8C00;'>
+        당신의 MBTI를 입력해주세요!
+    </h3>
+    """,
+    unsafe_allow_html=True
+)
     
     # MBTI 입력 전 메시지 표시
     for message in st.session_state.messages:
@@ -317,7 +322,14 @@ if not st.session_state.mbti:
     
 # 메인 화면 - MBTI 입력 후
 else:    
-    st.title(f"{st.session_state.month} {st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요👋")
+    st.markdown(
+    f"""
+    <h1 style="font-size: 30px; font-weight: bold; text-align: center;">
+        {st.session_state.month} {st.session_state.mbti} 맞춤형 여행지를 추천해드릴게요👋
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
     display_mbti_info(st.session_state.mbti)
     st.subheader("제주도 맛집에 대해 무엇이든 물어보세요!")
 

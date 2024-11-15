@@ -341,7 +341,7 @@ def generate_llm_response(query, formatted_data, user_mbti, month):
         return f"LLM 응답 생성 중 오류 발생: {str(e)}"
 
 # 챗봇 코드 수정
-def process_recommendation(message, mbti, month):
+def process_recommendation(message, mbti, month, memory):
     try:
         if 'all_restaurants' not in st.session_state:
             st.session_state.all_restaurants = []
@@ -357,7 +357,7 @@ def process_recommendation(message, mbti, month):
         print(f"2. 기존 query : {message}")
 
                 #쿼리 재생성
-        rewrite_the_message = llm.invoke(input=rewrite_message.format(query = message))
+        rewrite_the_message = llm.invoke(input=rewrite_message.format(query = message, memory = memory))
         print("****************************************************************")
         print("3. rewrite_the_message")
         print(rewrite_the_message)
