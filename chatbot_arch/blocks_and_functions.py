@@ -4,7 +4,7 @@ from langchain_core.output_parsers import StrOutputParser,JsonOutputParser
 from langchain.memory import ConversationTokenBufferMemory
 from langchain_google_genai import GoogleGenerativeAI # type: ignore
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.runnables import ConfigurableField
 
 from dotenv import load_dotenv
@@ -63,8 +63,9 @@ def validate_mbti(mbti):
 
 def clear_chat_history():
     st.session_state.memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=3000)
+    st.session_state.mbti = ""
     st.session_state.messages = [{"role": "assistant", "content": "제주도를 여행하기 딱 좋은 날씨네요 😎"}]
-    st.session_state.all_restaurants = pd.DataFrame()  # 맛집 데이터 초기화
+    st.session_state.all_restaurants = []  # 맛집 데이터 초기화
     st.session_state.all_tourist_spots = []  # 관광지 데이터 초기화
     st.session_state.map_center = [33.384, 126.551]  # 지도 중심 좌표 초기화
     st.session_state.radius = 50  # 반경 초기화 (제주도 전체 반경)
@@ -145,8 +146,6 @@ def load_faiss_and_search(query, mbti, month, k=3,):
 def get_restaurant_details(search_results, restaurants_df, mbti, month):
     try:
         restaurants_data = []
-        restaurant_db = load_df(mbti, month)
-        all_docs = restaurant_db.docstore._dict
         
         for result in search_results:
             # index기준으로 df에서 정보 가져옴
@@ -160,11 +159,6 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
                 '위도': result['위도'],
                 '경도': result['경도'],
                 }
-            # db에서 가져온 page contents
-            for doc in all_docs.values():
-                if doc.metadata.get('idx') == result['index']:
-                    restaurant_info['상세설명'] = doc.page_content
-                    break
                         
             restaurants_data.append(restaurant_info)
 
@@ -175,19 +169,18 @@ def get_restaurant_details(search_results, restaurants_df, mbti, month):
         return None
 
 # 맛집의 위도와 경도를 받아서 관광지데이터와 거리를 모두 계산.
-def find_nearby_tourist_spots(restaurants_data, tourist_spots_df, mbti, month, n=3):
+def find_nearby_tourist_spots(restaurant, tourist_spots_df, mbti, month, n=1):
     try:
-        restaurant_df = pd.DataFrame(restaurants_data)
-        restaurant_coords = (restaurants_data['위도'], restaurants_data['경도'])
-        distances = []
-        matching_docs = []
+        # 맛집 한 곳
+        restaurant_coords = (restaurant['위도'],restaurant['경도'])
+        all_spots = []
 
         # tourist df랑 추출한 맛집 데이터랑 거리 계산
         for i, tourist in tourist_spots_df.iterrows():
             tourist_coords = (tourist['위도'], tourist['경도'])
             distance = geodesic(restaurant_coords, tourist_coords).kilometers
             
-            distances.append({
+            all_spots.append({
                 '관광지명': tourist['관광지명'],
                 '주소': tourist['주소'],
                 '업종': tourist['소분류'],
@@ -197,25 +190,32 @@ def find_nearby_tourist_spots(restaurants_data, tourist_spots_df, mbti, month, n
                 'idx': i
             })
 
-        # 거리순으로 정렬해서 세개만
-        sorting = sorted(distances, key=lambda x: x['거리'])[:n] if distances else []
-
         # tourst db에서 page content 추출
         tourist_db = load_tour_df(mbti, month)
         all_docs = tourist_db.docstore._dict
+
+        for doc in all_docs.values():
+            if doc.metadata.get('idx') == all_spots[0]['idx']:
+                all_spots[0]['정보'] = doc.page_content  # matching_docs 정보 추가
+                
+        # # 거리순으로 정렬해서 세개만
+        nearby_spots = sorted(all_spots, key=lambda x: x['거리'])[:n] if all_spots else []
+        for doc in all_docs.values():
+            if doc.metadata.get('idx') == nearby_spots[0]['idx']:
+                 nearby_spots[0]['정보'] = doc.page_content  # matching_docs 정보 추가
         
-        tourist_data = []
-        for spot in sorting:
-            spot_info = spot.copy()  # 기존 거리 정보 복사
+        # tourist_data = []
+        # for spot in sorting:
+        #     spot_info = spot.copy()  # 기존 거리 정보 복사
             
-            # 해당 관광지의 문서 정보 찾기
-            for doc in all_docs.values():
-                if doc.metadata.get('idx') == spot['idx']:
-                    spot_info['상세설명'] = doc.page_content  # matching_docs 정보 추가
-                    tourist_data.append(spot_info)
-                    break
+        #     # 해당 관광지의 문서 정보 찾기
+        #     for doc in all_docs.values():
+        #         if doc.metadata.get('idx') == spot['idx']:
+        #             spot_info['상세설명'] = doc.page_content  # matching_docs 정보 추가
+        #             tourist_data.append(spot_info)
+        #             break
         
-        return tourist_data
+        return nearby_spots
         
     except Exception as e:
         st.error(f"관광지 검색 중 오류 발생: {str(e)}")
@@ -286,18 +286,14 @@ def create_map_with_restaurants_and_tourists(restaurants_data, tourist_spots):
 def display_map_with_data(map_obj):
     try:
         if map_obj:
-            if 'map_container' not in st.session_state:
-                st.session_state.map_container = st.empty()
-                
-            with st.session_state.map_container:
-                st_folium(
-                    map_obj,
-                    width=700,
-                    height=500,
-                    key="persistent_map",
-                    returned_objects=[]
-                )
-                
+            map_key = f"map_{len(st.session_state.messages)}"  # 동적 키 생성
+            st_folium(
+                map_obj,
+                width=700,
+                height=500,
+                key=map_key,  # 동적 키 사용
+                returned_objects=[]
+            )
     except Exception as e:
         st.error(f"지도 표시 중 오류 발생: {str(e)}")
 
@@ -305,23 +301,19 @@ def display_map_with_data(map_obj):
 def create_cached_map(_restaurants_data, _tourist_spots):
     return create_map_with_restaurants_and_tourists(_restaurants_data, _tourist_spots)
 
-def format_restaurant_and_tourist_response(restaurants_data, tourist_spots):
+def format_restaurant_and_tourist_response(restaurants_data, tourist_spots_data):
     try:
-        restaurants_df = pd.DataFrame(restaurants_data)
-        if restaurants_df is None or restaurants_df.empty:
-            return "죄송합니다. 맛집을 찾을 수 없습니다."
             
         formatted_data = []
-        for idx, row in restaurants_df.iterrows():
+        for i in range(len(restaurants_data)):
             restaurant_info = {
-                "맛집 설명": row['상세설명'],
+                "맛집 설명": restaurants_data[i]['정보'],
                 "주변_관광지": [
                     {
-                        "관광지 설명": tourist['상세설명'],
-                        "거리": f"{tourist['거리']:.1f}km"
+                        "관광지 설명": tourist_spots_data[i]['정보'],
+                        "거리": f"{tourist_spots_data[i]['거리']:.1f}km"
                     }
-                    for tourist in tourist_spots[idx]
-                ]
+                    ]
             }
             formatted_data.append(restaurant_info)
         return formatted_data
@@ -345,6 +337,11 @@ def generate_llm_response(query, formatted_data, user_mbti):
 # 챗봇 코드 수정
 def process_recommendation(message, mbti, month):
     try:
+        if 'all_restaurants' not in st.session_state:
+            st.session_state.all_restaurants = []
+        if 'all_tourist_spots' not in st.session_state:
+            st.session_state.all_tourist_spots = []
+
         restaurants_df = pd.read_csv(f"./chatbot_arch/data/mct_df/{mbti}/mct_{month}_{mbti}.csv")
         tourist_spots_df = pd.read_csv(f"./chatbot_arch/data/tour_df/{mbti}/tour_{month}_{mbti}.csv")
         
@@ -355,25 +352,23 @@ def process_recommendation(message, mbti, month):
         
         # 맛집 데이터 정렬
         restaurants_data = get_restaurant_details(search_results, restaurants_df, mbti, month)
-        if restaurants_data is None:
-            return "음식점 정보를 가져오는데 실패했습니다.", None, None
-        
         # 관광지 데이터 정렬
         tourist_spots_data = []
         for _, restaurant in pd.DataFrame(restaurants_data).iterrows():
             nearby_spots = find_nearby_tourist_spots(restaurant, tourist_spots_df, mbti, month)
-            tourist_spots_data.append(nearby_spots)  
-
+            tourist_spots_data.append(nearby_spots[0])
         # 두 데이터 합쳐서 llm에 입력
         formatted_data = format_restaurant_and_tourist_response(restaurants_data, tourist_spots_data)
         response = generate_llm_response(message, formatted_data, mbti)
+
+        print('formatted_data         ', formatted_data)
 
         # 세션 스테이트에 누적 저장
         # 중복제거
         # 맛집 데이터
 
         if 'all_restaurants' not in st.session_state:
-            restaurants_filter = [item for item in restaurants_data if item['음식점명'] in str(response)]
+            restaurants_filter = [item for item in restaurants_data if item['음식점명'].replace(' ','') in str(response).replace(' ','')]
             deduplicated_dict = {}
             for item in restaurants_filter:
                 restaurant = item['음식점명']
@@ -382,27 +377,33 @@ def process_recommendation(message, mbti, month):
             # 딕셔너리의 값들을 리스트로 변환
             st.session_state.all_restaurants = list(deduplicated_dict.values())
         else:
-            # 두 데이터를 합치기
-            restaurants_filter = [item for item in restaurants_data if item['음식점명'] in str(response)]
-            merged_data = st.session_state.all_restaurants + restaurants_filter
-            deduplicated_dict = {}
+            # 새로운 데이터 필터링
+            restaurants_filter = [item for item in restaurants_data if item['음식점명'].replace(' ','') in str(response).replace(' ','')]
+            
+            # 기존 데이터를 딕셔너리로 변환
+            deduplicated_dict = {rest['음식점명']: rest for rest in st.session_state.all_restaurants}
+            
+            # 새로운 데이터 추가/업데이트
             for item in restaurants_filter:
                 restaurant = item['음식점명']
-                # 같은 음식점명이 있을 경우 마지막 데이터로 덮어씌워짐
                 deduplicated_dict[restaurant] = item
-            # 딕셔너리의 값들을 리스트로 변환
+            
+            # 딕셔너리를 다시 리스트로 변환하여 저장
             st.session_state.all_restaurants = list(deduplicated_dict.values())
 
         # 관광지 데이터
         # [[{},{},{}],[{},{},{}]] => [{},{},{}, ...]
-        tourist_spots_lst = []
-        for i in range(3):
-            k = tourist_spots_data[i]
-            for j in range(3):
-                tourist_spots_lst.append(k[j])
-
+        # tourist_spots_lst = []
+        # for i in range(3):
+        #     k = tourist_spots_data[i]
+        #     for j in range(3):
+        #         tourist_spots_lst.append(k[j])
+    
+        # for i in tourist_spots_data:
+        #     tourist_spots_lst.append(i[0])
+        
         if 'all_tourist_spots' not in st.session_state:
-            tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
+            tourist_spots_filter = [item for item in tourist_spots_data if item['관광지명'].replace(' ','') in str(response).replace(' ','')]
             deduplicated_dict = {}
             for item in tourist_spots_filter:
                 tourist_spot = item['관광지명']
@@ -412,7 +413,7 @@ def process_recommendation(message, mbti, month):
             st.session_state.all_tourist_spots = list(deduplicated_dict.values())
         else:
             # 두 데이터를 합치기
-            tourist_spots_filter = [item for item in tourist_spots_lst if item['관광지명'] in str(response)]
+            tourist_spots_filter = [item for item in tourist_spots_data if item['관광지명'].replace(' ','') in str(response).replace(' ','')]
             merged_data = st.session_state.all_tourist_spots + tourist_spots_filter
             # 관광지명을 키로 하는 딕셔너리 생성
             # 딕셔너리를 사용하면 자동으로 중복이 제거됨
@@ -424,6 +425,10 @@ def process_recommendation(message, mbti, month):
 
             # 딕셔너리의 값들을 리스트로 변환
             st.session_state.all_tourist_spots = list(deduplicated_dict.values())
+            
+        print('st.session_state.all_restaurants       :', st.session_state.all_restaurants)
+        print('st.session_state.all_tourist_spots     :', st.session_state.all_tourist_spots)
+
 
         return response, restaurants_data, tourist_spots_data
         

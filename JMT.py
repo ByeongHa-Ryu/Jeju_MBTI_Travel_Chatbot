@@ -223,6 +223,17 @@ st.markdown(
         text-align: center !important;
         border-bottom: 2px solid #FFA500 !important;
     }
+    /* 챗봇 메시지 텍스트 색상 강제 지정 */
+    .stChatMessage p,
+    .stChatMessage div,
+    .stChatMessage span {
+        color: #000000 !important;
+    }
+
+    /* 챗봇 메시지 내부의 모든 텍스트 요소에 대한 색상 지정 */
+    [data-testid="stChatMessageContent"] * {
+        color: #000000 !important;
+}
     </style>
     """,
     unsafe_allow_html=True
@@ -296,7 +307,7 @@ with st.sidebar:
 
 
 if not st.session_state.mbti:
-    st.title("🍊JMT와 함께 제주도로 떠나볼까요?👋")
+    st.title("JMT와 함께 제주도로 떠나볼까요?👋")
     st.subheader("당신의 MBTI를 입력해주세요!")
     
     # MBTI 입력 전 메시지 표시

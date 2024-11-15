@@ -44,19 +44,7 @@ def Callout(message, memory, user_mbti, month):
 
         elif "추천 관련" in classification_response:
             try:
-                final_response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
-                # Process recommendation                
-                if restaurants_data is not None and tourist_spots is not None:
-                    # Create containers if they don't exist
-                    if 'title_container' not in st.session_state:
-                        st.session_state.title_container = st.container()
-                    if 'info_section' not in st.session_state:
-                        st.session_state.info_section = st.container()
-                    
-                    # Display title
-                    with st.session_state.title_container:
-                        st.subheader("🗺️ 추천 맛집과 주변 관광지")
-                    
+                final_response, _, _ = process_recommendation(message, user_mbti, month)
                 return final_response
                 
             except Exception as e:
@@ -64,8 +52,6 @@ def Callout(message, memory, user_mbti, month):
             
         elif "부가 질문" in classification_response:
             restaurants_state, tourist_spots_state = state()
-            print('부가질문:         ', restaurants_state)
-            print('부가질문:         ', tourist_spots_state)
             final_response = llm.invoke(
                 input=question_inst.format(
                     input_query = message,

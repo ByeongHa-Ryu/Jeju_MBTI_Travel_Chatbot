@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import folium
 from folium import plugins
-from geopy.distance import geodesic
 from haversine import haversine
 
 # 페이지 설정
