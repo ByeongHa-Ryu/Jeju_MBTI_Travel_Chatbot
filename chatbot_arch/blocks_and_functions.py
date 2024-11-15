@@ -19,7 +19,12 @@ import folium
 from folium import plugins
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
+from mbti_info.mbti import load_mbti_info
 
+def write_log(txt):
+    txt_file = open('log.txt','a')
+    txt_file.write(txt)
+    txt_file.close()
 
 """LLM Blocks"""
 
@@ -81,7 +86,7 @@ def retrieve_mct(loaded_db, query):
        }
    )
    query = f"{query}"
-   return retriever.get_relevant_documents(query)
+   return retriever.invoke(query)
 
 # 맛집 db load
 def load_df(mbti, month):
@@ -120,7 +125,7 @@ def load_tour_df(mbti, month):
     return loaded_tour_db
 
 #추출된 맛집 데이터의 metadata와 pagecontents 추출
-def load_faiss_and_search(query, mbti, month, k=3,):
+def load_faiss_and_search(query, mbti, month, k=3):
     try:
         loaded_db = load_df(mbti, month)
         retrieve_documents = retrieve_mct(loaded_db, query)
@@ -143,7 +148,7 @@ def load_faiss_and_search(query, mbti, month, k=3,):
         return None
 
 # 맛집데이터의 상세정보를 index를 기준으로 csv에서 불러옴
-def get_restaurant_details(search_results, restaurants_df, mbti, month):
+def get_restaurant_details(search_results, restaurants_df):
     try:
         restaurants_data = []
         
@@ -204,16 +209,6 @@ def find_nearby_tourist_spots(restaurant, tourist_spots_df, mbti, month, n=1):
             if doc.metadata.get('idx') == nearby_spots[0]['idx']:
                  nearby_spots[0]['정보'] = doc.page_content  # matching_docs 정보 추가
         
-        # tourist_data = []
-        # for spot in sorting:
-        #     spot_info = spot.copy()  # 기존 거리 정보 복사
-            
-        #     # 해당 관광지의 문서 정보 찾기
-        #     for doc in all_docs.values():
-        #         if doc.metadata.get('idx') == spot['idx']:
-        #             spot_info['상세설명'] = doc.page_content  # matching_docs 정보 추가
-        #             tourist_data.append(spot_info)
-        #             break
         
         return nearby_spots
         
@@ -259,23 +254,23 @@ def create_map_with_restaurants_and_tourists(restaurants_data, tourist_spots):
                 icon=folium.Icon(color='red', icon='info-sign')
             ).add_to(m)
             
-            if idx < len(tourist_spots):
-                for tourist in tourist_spots[idx]:
-                    if pd.isna(tourist['위도']) or pd.isna(tourist['경도']):
-                        continue
-                        
-                    tourist_popup = f"""
-                        <div style='width: 200px'>
-                            <h4 style='margin: 0; padding: 5px 0;'>{tourist['관광지명']}</h4>
-                            <p style='margin: 5px 0;'>주소: {tourist['주소']}</p>
-                        </div>
-                    """
+            #if idx < len(tourist_spots):
+            for tourist in tourist_spots[idx]:
+                if pd.isna(tourist['위도']) or pd.isna(tourist['경도']):
+                    continue
                     
-                    folium.Marker(
-                        location=[tourist['위도'], tourist['경도']],
-                        popup=folium.Popup(tourist_popup, max_width=300),
-                        icon=folium.Icon(color='blue', icon='info-sign')
-                    ).add_to(m)
+                tourist_popup = f"""
+                    <div style='width: 200px'>
+                        <h4 style='margin: 0; padding: 5px 0;'>{tourist['관광지명']}</h4>
+                        <p style='margin: 5px 0;'>주소: {tourist['주소']}</p>
+                    </div>
+                """
+                
+                folium.Marker(
+                    location=[tourist['위도'], tourist['경도']],
+                    popup=folium.Popup(tourist_popup, max_width=300),
+                    icon=folium.Icon(color='blue', icon='info-sign')
+                ).add_to(m)
         
         return m
         
@@ -321,14 +316,25 @@ def format_restaurant_and_tourist_response(restaurants_data, tourist_spots_data)
     except Exception as e:
         return f"정보 포매팅 중 오류 발생: {str(e)}"
 
-def generate_llm_response(query, formatted_data, user_mbti):
+def generate_llm_response(query, formatted_data, user_mbti, month):
     try:
         response = llm.invoke(
             input=recommend_inst.format(
             query=query, 
             formatted_data=formatted_data, 
-            user_mbti=user_mbti)
-        )   
+            user_mbti=user_mbti,
+            user_mbti_info = load_mbti_info(user_mbti),
+            month = month)
+        )
+
+        write_log('********************************\n')
+        write_log(recommend_inst.format(
+            query=query, 
+            formatted_data=formatted_data, 
+            user_mbti=user_mbti,
+            user_mbti_info = load_mbti_info(user_mbti),
+            month=month
+            ))
         return response
         
     except Exception as e:
@@ -344,14 +350,20 @@ def process_recommendation(message, mbti, month):
 
         restaurants_df = pd.read_csv(f"./chatbot_arch/data/mct_df/{mbti}/mct_{month}_{mbti}.csv")
         tourist_spots_df = pd.read_csv(f"./chatbot_arch/data/tour_df/{mbti}/tour_{month}_{mbti}.csv")
-        
+
+        print("****************************************************************")
+        print(f"1. {mbti} {month}월 csv load")        
+        print("****************************************************************")
+
         # 쿼리로 맛집 데이터 세개 검색
-        search_results = load_faiss_and_search(message, mbti, month, k=3)
+        search_results = load_faiss_and_search(message, mbti, month, k=2)
         if not search_results:
             return "죄송합니다. 해당하는 맛집을 찾을 수 없습니다.", None, None
-        
+        print(f"2. db에서 search query : {message}")
+        print("****************************************************************")
+        print("2.5 여기서 쿼리 내용 의도파악 하거니 키워드 추출해서 쿼리를 수정해야할듯 => ex) 쿼리의 의도를 파악해서 쿼리를 수정해줘")
         # 맛집 데이터 정렬
-        restaurants_data = get_restaurant_details(search_results, restaurants_df, mbti, month)
+        restaurants_data = get_restaurant_details(search_results, restaurants_df)
         # 관광지 데이터 정렬
         tourist_spots_data = []
         for _, restaurant in pd.DataFrame(restaurants_data).iterrows():
@@ -359,9 +371,27 @@ def process_recommendation(message, mbti, month):
             tourist_spots_data.append(nearby_spots[0])
         # 두 데이터 합쳐서 llm에 입력
         formatted_data = format_restaurant_and_tourist_response(restaurants_data, tourist_spots_data)
-        response = generate_llm_response(message, formatted_data, mbti)
+        formatted_datas = []
+        for i in range(len(restaurants_data)):
+            restaurant_info = {
+                "맛집": restaurants_data[i]['음식점명'],
+                "관광지": tourist_spots_data[i]['관광지명'],
+            }
+            formatted_datas.append(restaurant_info)
+        print("****************************************************************")
+        print("3. 맛집 관광지 데이터 포멧팅")
+        print("관광지도 가장 가까운거 말고 세개 뽑아서 가장 관련성 있는거 하나를 뽑는게 나을듯")
+        print("****************************************************************")
+        print(formatted_datas)
+              
+        # formatted_data에 줄바꿈 문자 추가
+        formatted_data = str(formatted_data).replace('}','} \n')
+        response = generate_llm_response(message, formatted_data, mbti, month)
 
-        print('formatted_data         ', formatted_data)
+        print("****************************************************************")
+        print("4. LLM응답")
+        print("****************************************************************")
+        print(response)
 
         # 세션 스테이트에 누적 저장
         # 중복제거
@@ -391,17 +421,7 @@ def process_recommendation(message, mbti, month):
             # 딕셔너리를 다시 리스트로 변환하여 저장
             st.session_state.all_restaurants = list(deduplicated_dict.values())
 
-        # 관광지 데이터
-        # [[{},{},{}],[{},{},{}]] => [{},{},{}, ...]
-        # tourist_spots_lst = []
-        # for i in range(3):
-        #     k = tourist_spots_data[i]
-        #     for j in range(3):
-        #         tourist_spots_lst.append(k[j])
-    
-        # for i in tourist_spots_data:
-        #     tourist_spots_lst.append(i[0])
-        
+
         if 'all_tourist_spots' not in st.session_state:
             tourist_spots_filter = [item for item in tourist_spots_data if item['관광지명'].replace(' ','') in str(response).replace(' ','')]
             deduplicated_dict = {}
@@ -426,8 +446,16 @@ def process_recommendation(message, mbti, month):
             # 딕셔너리의 값들을 리스트로 변환
             st.session_state.all_tourist_spots = list(deduplicated_dict.values())
             
-        print('st.session_state.all_restaurants       :', st.session_state.all_restaurants)
-        print('st.session_state.all_tourist_spots     :', st.session_state.all_tourist_spots)
+        print("****************************************************************")
+        print('5. 응답기반 session state 수정')
+        print("****************************************************************")
+        print('[맛집 정보]')
+
+        for restaurant in st.session_state.all_restaurants:
+            print(restaurant['음식점명'])   
+        print('[관광지]')
+        for restaurant in st.session_state.all_tourist_spots:
+            print(restaurant['관광지명'])
 
 
         return response, restaurants_data, tourist_spots_data
@@ -437,4 +465,18 @@ def process_recommendation(message, mbti, month):
         return f"처리 중 오류가 발생했습니다: {str(e)}", None, None
 
 def state():
+    print("[부가질문]")
+    print('[맛집 정보]')
+    print("********************************")
+
+    for restaurant in st.session_state.all_restaurants:
+            print(restaurant['음식점명'])   
+            print(restaurant['정보']) 
+
+    print('[관광지 정보]')            
+    print("********************************")
+    for restaurant in st.session_state.all_tourist_spots:
+        print(restaurant['관광지명'])
+        print(restaurant['정보']) 
+
     return st.session_state.all_restaurants, st.session_state.all_tourist_spots
