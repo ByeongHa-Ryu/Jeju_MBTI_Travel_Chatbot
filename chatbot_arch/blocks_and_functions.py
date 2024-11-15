@@ -327,14 +327,14 @@ def generate_llm_response(query, formatted_data, user_mbti, month):
             month = month)
         )
 
-        write_log('********************************\n')
-        write_log(recommend_inst.format(
-            query=query, 
-            formatted_data=formatted_data, 
-            user_mbti=user_mbti,
-            user_mbti_info = load_mbti_info(user_mbti),
-            month=month
-            ))
+        # write_log('********************************\n')
+        # write_log(recommend_inst.format(
+        #     query=query, 
+        #     formatted_data=formatted_data, 
+        #     user_mbti=user_mbti,
+        #     user_mbti_info = load_mbti_info(user_mbti),
+        #     month=month
+        #     ))
         return response
         
     except Exception as e:
@@ -354,14 +354,19 @@ def process_recommendation(message, mbti, month):
         print("****************************************************************")
         print(f"1. {mbti} {month}월 csv load")        
         print("****************************************************************")
+        print(f"2. 기존 query : {message}")
+
+                #쿼리 재생성
+        rewrite_the_message = llm.invoke(input=rewrite_message.format(query = message))
+        print("****************************************************************")
+        print("3. rewrite_the_message")
+        print(rewrite_the_message)
 
         # 쿼리로 맛집 데이터 세개 검색
-        search_results = load_faiss_and_search(message, mbti, month, k=2)
+        search_results = load_faiss_and_search(rewrite_the_message, mbti, month, k=2)
         if not search_results:
             return "죄송합니다. 해당하는 맛집을 찾을 수 없습니다.", None, None
-        print(f"2. db에서 search query : {message}")
-        print("****************************************************************")
-        print("2.5 여기서 쿼리 내용 의도파악 하거니 키워드 추출해서 쿼리를 수정해야할듯 => ex) 쿼리의 의도를 파악해서 쿼리를 수정해줘")
+
         # 맛집 데이터 정렬
         restaurants_data = get_restaurant_details(search_results, restaurants_df)
         # 관광지 데이터 정렬
@@ -375,14 +380,18 @@ def process_recommendation(message, mbti, month):
         for i in range(len(restaurants_data)):
             restaurant_info = {
                 "맛집": restaurants_data[i]['음식점명'],
+                "맛집정보": restaurants_data[i]['정보'],
                 "관광지": tourist_spots_data[i]['관광지명'],
             }
             formatted_datas.append(restaurant_info)
         print("****************************************************************")
         print("3. 맛집 관광지 데이터 포멧팅")
-        print("관광지도 가장 가까운거 말고 세개 뽑아서 가장 관련성 있는거 하나를 뽑는게 나을듯")
         print("****************************************************************")
-        print(formatted_datas)
+        for item in formatted_datas:
+            print(f"맛집: {item['맛집']}")
+            print(f"맛집정보: {item['맛집정보']}")
+            print(f"관광지: {item['관광지']}")
+            print("-" * 60)  # 구분선 추가
               
         # formatted_data에 줄바꿈 문자 추가
         formatted_data = str(formatted_data).replace('}','} \n')

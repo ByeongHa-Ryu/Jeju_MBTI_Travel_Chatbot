@@ -19,7 +19,7 @@ from chatbot_arch.blocks_and_functions import *
 def Callout(message, memory, user_mbti, month):
     try:
         # Query classification 
-        classification_response = llm.invoke(input=cls_llm_inst.format(input_query=message,memory = memory,few_shot_prompt_for_cls=few_shot_prompt_for_cls))
+        classification_response = llm.invoke(input=cls_llm_inst.format(input_query=message,memory = memory, few_shot_prompt_for_cls=few_shot_prompt_for_cls))
         if "분석 관련" in classification_response:
             
             f = io.StringIO()
@@ -49,9 +49,9 @@ def Callout(message, memory, user_mbti, month):
 
         elif "추천 관련" in classification_response:
             try:
+
                 final_response, _, _ = process_recommendation(message, user_mbti, month)
                 # final_response, restaurants_data, tourist_spots = process_recommendation(message, user_mbti, month)
-
                 # write_log('******************************** \n')
                 # write_log('query : ' + message+' \n')
                 # write_log("추천관련 \n")
@@ -75,6 +75,7 @@ def Callout(message, memory, user_mbti, month):
                     )
             )
             print("LLM 응답")
+            print("********************************")
             print(final_response)
             # write_log('********************************\n')
             # write_log(f'query : {message} \n')
